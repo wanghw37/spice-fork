@@ -33,7 +33,7 @@ def temp_workspace():
             'name': 'test_run',
             'input_files': {
                 'copynumber': os.path.join(data_dir, 'example_data.tsv'),
-                'knn_train': os.path.join(repo_root, 'objects', 'knn_train_data.pickle')
+                'knn_train': os.path.join(repo_root, 'objects', 'train_events_sv_and_unamb.pickle')
             },
             'directories': {
                 'results_dir': results_dir,
@@ -292,3 +292,27 @@ class TestCLI:
         )
         # Should not fail on argument parsing
         assert 'Invalid step' not in result.stderr
+
+
+class TestExecution:
+    """Test suite for SPICE CLI execution."""
+
+    def test_normal_execution(self, temp_workspace):
+        tmpdir, config_path = temp_workspace
+        
+        result = subprocess.run(
+            ['spice', '--config', config_path],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+    def test_cores_execution(self, temp_workspace):
+        tmpdir, config_path = temp_workspace
+        
+        result = subprocess.run(
+            ['spice', '--config', config_path, '--cores', '4'],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
