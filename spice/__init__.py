@@ -33,25 +33,31 @@ def load_config(config_path: str | None = None):
     """
     global default_config, config, directories
 
+    # set os.environ['SPICE_CONFIG']
+    if config_path is not None:
+        set_config(config_path)
+
     # Always load the default first
     default_path = os.path.join(Path(__file__).parent.parent, 'default_config.yaml')
     default_config = _read_yaml(default_path)
 
     # Determine user config source
     user_cfg = {}
-    # Environment variable override (useful for non-CLI contexts)
+    # Environment variable override
     env_cfg_path = os.environ.get('SPICE_CONFIG')
     cfg_candidate = config_path or env_cfg_path
-    if cfg_candidate is None:
-        candidate_on_repo = os.path.join(Path(__file__).parent.parent, 'config.yaml')
-        if os.path.exists(candidate_on_repo):
-            cfg_candidate = candidate_on_repo
-
     if cfg_candidate is not None and os.path.exists(cfg_candidate):
         user_cfg = _read_yaml(cfg_candidate) or {}
 
     # Merge user config onto defaults
     config = update_nested_dict(default_config, user_cfg)
+    # Track whether we're still using the default-only configuration
+    if isinstance(config, dict):
+        config.setdefault('meta', {})
+        config['meta']['is_default'] = (user_cfg == {} and env_cfg_path is None and config_path is None)
+        if config_path or env_cfg_path:
+            # Record where overrides came from
+            config['meta']['source_path'] = os.path.abspath(config_path or env_cfg_path)
     directories = config.get('directories', {})
 
     # Fallbacks for core directories if not provided
@@ -86,3 +92,21 @@ def load_config(config_path: str | None = None):
 
 # Perform an initial load so library usage without CLI still works as before
 load_config()
+
+def set_config(config_path=None):
+    """Set the SPICE_CONFIG environment variable for worker processes.
+
+    Synchronize environment for worker processes with safeguards
+    Only set if a valid explicit config_path was provided and "SPICE_CONFIG" wasn't already set.
+    """
+
+    if config_path and os.path.exists(config_path):
+        new_abs = os.path.abspath(config_path)
+        if not os.environ.get('SPICE_CONFIG'):
+            os.environ['SPICE_CONFIG'] = new_abs
+        else:
+            cur_abs = os.path.abspath(cur_env)
+            if cur_abs != new_abs:
+                import warnings
+                warnings.warn(
+                    f"SPICE_CONFIG already set to '{cur_abs}'. Requested different path '{new_abs}' will be ignored.")
