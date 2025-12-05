@@ -232,7 +232,7 @@ Examples:
         raise NotImplementedError("total_cn=True is not yet supported in this version of SPICE")
 
     # Clean old files
-    if not args.keep_old:
+    if not args.keep_old and args.ids is None:
         logger.info('Cleaning old intermediate files')
         step_aware_cleanup(results_dir, which)
 
