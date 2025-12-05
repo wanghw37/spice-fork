@@ -211,11 +211,7 @@ def step_aware_cleanup(results_dir, requested_steps=None):
             except FileNotFoundError:
                 pass
 
-    if requested_steps is None:
-        start_idx = 0
-    else:
-        relevant_steps = [step_order.index(s) for s in requested_steps if s in step_order]
-        start_idx = min(relevant_steps) if relevant_steps else len(step_order)
+    start_idx = 0 if requested_steps is None else min(step_order.index(s) for s in requested_steps if s in step_order)
 
     targets = []
     for s in step_order[start_idx:]:
