@@ -22,7 +22,7 @@ conda install -c bioconda -c conda-forge medicc2
 
 Or better directly create a new conda environment with MEDICC2 inside of it 
 ```bash
-conda create -n test spice_env -c conda-forge -c bioconda
+conda create -n spice_env -c conda-forge -c bioconda medicc2
 conda activate spice_env
 ```
 
@@ -276,7 +276,7 @@ snakemake --rerun-triggers mtime --slurm -j250 --keep-going
 
 ### Python API
 
-You can also import and use SPICE functions directly in Python. Note that it is important to run `spice.load_config(config_file)` before any other spice imports.
+You can also import and use SPICE functions directly in Python. Note that it is important to run `spice.load_config(config_file)` before any other spice imports
 ```python
 import spice
 spice.load_config(config_file)
