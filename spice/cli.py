@@ -7,6 +7,8 @@ import yaml
 import argparse
 from joblib import Parallel, delayed
 
+import pandas as pd
+
 # Import base package only; defer submodule imports until after config is loaded
 import spice
 
@@ -15,14 +17,22 @@ def _run_batch(cur_ids, cores, desc, func, logger):
     """Run a batch of tasks either serially or in parallel."""
     n_jobs = cores if (cores is not None and cores > 1) else 1
     logger.info(f"{desc}: running on {n_jobs} core(s) for {len(cur_ids)} items")
+    
+    def _safe_func(cid):
+        try:
+            return func(cid)
+        except Exception as e:
+            logger.error(f"{desc}: failed for id '{cid}' with error: {e}", exc_info=True)
+            return {"id": cid, "status": "failed", "error": str(e), "step": desc}
+
     if n_jobs == 1:
         results = []
         for i, cid in enumerate(cur_ids):
             logger.info(f'{desc}: {i+1} / {len(cur_ids)} finished ({100*i/len(cur_ids):.1f}%) - {cid}')
-            results.append(func(cid))
+            results.append(_safe_func(cid))
         return results
     else:
-        return Parallel(n_jobs=n_jobs)(delayed(func)(cid) for cid in cur_ids)
+        return Parallel(n_jobs=n_jobs)(delayed(_safe_func)(cid) for cid in cur_ids)
 
 
 def main():
@@ -162,19 +172,7 @@ Examples:
     # Load configuration before importing submodules that may read it
     spice.load_config(args.config_path)
     from spice import config
-    from spice.utils import configure_logging, get_logger
-    
-    # Configure global logging settings BEFORE creating any loggers
-    # Determine logging level (override to DEBUG if --debug)
-    log_level = 'DEBUG' if args.debug else config['params'].get('logging_level', 'INFO')
-    configure_logging(
-        log_mode=args.log,
-        log_dir=config['directories']['log_dir'],
-        config_name=config['name'],
-        level=log_level,
-    )
-    
-    # Import submodules (some like medicc may call logging.config.dictConfig)
+    from spice.utils import configure_logging, get_logger, save_fail_reports
     from spice.preprocessing.split_input import split_tsv_file
     from spice.utils import open_pickle, log_debug, resolve_data_file, step_aware_cleanup
     from spice import plot as spice_plot
@@ -183,6 +181,13 @@ Examples:
         combine_final_events)
     
     # Create logger AFTER imports to avoid it being disabled by medicc's logging.config.dictConfig
+    log_level = 'DEBUG' if args.debug else config['params'].get('logging_level', 'INFO')
+    configure_logging(
+        log_mode=args.log,
+        log_dir=config['directories']['log_dir'],
+        config_name=config['name'],
+        level=log_level,
+    )    
     logger = get_logger('SPICE')
 
     if 'name' not in config or not config['name']:
@@ -207,9 +212,6 @@ Examples:
 
     logger.info('Running SPICE: Selection Patterns In somatic Copy-number Events')
     logger.info(f'Running for project name {name} with config file {args.config_path}')
-
-    with open(os.path.join(results_dir, 'config.yaml'), 'wt') as f:
-        yaml.safe_dump(config, f)
 
     if args.total_cn:
         raise NotImplementedError('--total-cn is not implemented yet')
@@ -255,6 +257,9 @@ Examples:
         logger.info('Starting splitting of the input TSV')
         split_tsv_file(name, keep_old=args.keep_old, cores=args.cores, selected_ids=selected_ids)
 
+    # Collect per-ID failures to report at end
+    failed_reports = []
+
     if 'all_solutions' in which:
         logger.info('Starting inference of all solutions')
         for wgd_status in ['nowgd', 'wgd']:
@@ -279,7 +284,9 @@ Examples:
                     save_output=True,
                     skip_loh_checks=True,
                 )
-            _run_batch(cur_ids, args.cores, f'All solutions ({wgd_status})', run_full_paths, logger)
+            results = _run_batch(cur_ids, args.cores, f'All solutions ({wgd_status})', run_full_paths, logger)
+            failed_reports.extend([r for r in results if isinstance(r, dict) and r.get('status') == 'failed'])
+        save_fail_reports(failed_reports)
 
     if 'disambiguate' in which:
         logger.info('Starting KNN disambiguation of solutions with multiple paths')
@@ -307,7 +314,10 @@ Examples:
                     perform_loh_checks=True,
                     single_width_bin=True
                 )
-            _run_batch(cur_ids, args.cores, f'Disambiguate solutions ({wgd_status})', run_knn, logger)
+            results = _run_batch(cur_ids, args.cores, f'Disambiguate solutions ({wgd_status})', run_knn, logger)
+            failed_reports.extend([r for r in results if isinstance(r, dict) and r.get('status') == 'failed'])
+        save_fail_reports(failed_reports)
+
 
     if 'large_chroms' in which:
         logger.info('Starting MCMC inference for large chromosomes with many events')
@@ -336,7 +346,10 @@ Examples:
                     fail_on_empty=False,
                     perform_loh_checks=True
                 )
-            _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
+            results = _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
+            failed_reports.extend([r for r in results if isinstance(r, dict) and r.get('status') == 'failed'])
+        save_fail_reports(failed_reports)
+
 
     if 'combine' in which:
         logger.info('Starting combination of final events from all solving methods')
@@ -416,6 +429,8 @@ Examples:
             out_path = os.path.join(plots_base_dir, f'{safe_id}_events.png')
             fig.savefig(out_path, bbox_inches='tight')
             logger.info(f'Saved plot to {out_path}')
+
+    save_fail_reports(failed_reports, logger=logger)
 
     logger.info(f'Done. Results are in {results_dir}')
 

@@ -169,6 +169,8 @@ def step_aware_cleanup(results_dir, requested_steps=None):
             ('nowgd', 'chrom_data_large'),
             ('wgd', 'chrom_data_full'),
             ('wgd', 'chrom_data_large'),
+            ('', 'WGD_status_major_cn.png'),
+            ('', 'WGD_status_ploidy_loh.png'),
         ],
         'all_solutions': [
             ('nowgd', 'full_paths_multiple_solutions'),
@@ -187,6 +189,7 @@ def step_aware_cleanup(results_dir, requested_steps=None):
         'combine': [
             ('', 'final_events.tsv'),
             ('', 'summary.tsv'),
+            ('', 'failed_reports.tsv'),
         ],
     }
 
@@ -663,3 +666,21 @@ def suppress_warnings(warning_type=None):
 def log_debug(logger, msg):
     if logger.level == logging.DEBUG:
         logger.debug(msg)
+
+
+def save_fail_reports(failed_reports, results_dir=None, logger=None):
+    if results_dir is None:
+        from spice import directories
+        results_dir = directories['results_dir']
+    if len(failed_reports) == 0:
+        return pd.DataFrame(columns=['id', 'step', 'error', 'status'])
+    df_fail = pd.DataFrame(failed_reports)
+    for col in ['id', 'step', 'error', 'status']:
+        if col not in df_fail.columns:
+            df_fail[col] = None
+    fail_path = os.path.join(results_dir, 'failed_reports.tsv')
+    df_fail[['id', 'step', 'error', 'status']].to_csv(fail_path, sep='\t', index=False)
+    if logger is not None:
+        logger.info(f"A total of {len(df_fail)} tasks failed during execution. "
+                    f"Saved failure report with to {fail_path}")
+    return df_fail
