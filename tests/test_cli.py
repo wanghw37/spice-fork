@@ -18,9 +18,11 @@ def temp_workspace():
         data_dir = os.path.join(tmpdir, 'data')
         results_dir = os.path.join(tmpdir, 'results')
         logs_dir = os.path.join(tmpdir, 'logs')
+        plot_dir = os.path.join(tmpdir, 'plots')
         os.makedirs(data_dir)
         os.makedirs(results_dir)
         os.makedirs(logs_dir)
+        os.makedirs(plot_dir)
         
         # Copy example data file
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +39,8 @@ def temp_workspace():
             },
             'directories': {
                 'results_dir': results_dir,
-                'log_dir': logs_dir
+                'log_dir': logs_dir,
+                'plot_dir': plot_dir
             },
             'params': {
                 'dist_limit': 40,
@@ -335,8 +338,15 @@ class TestExecution:
             content = f.read()
             assert 'RPelvicLNMet_A12D-0020_CRUK_PC_0020_M3_DEBUG' in content
 
-    def test_potting(self, temp_workspace):
+    def test_plotting(self, temp_workspace):
         tmpdir, config_path = temp_workspace
+        
+        result = subprocess.run(
+            ['spice', '--config', config_path],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Initial execution failed, cannot test plotting: {result.stderr}"
         
         for plot_flags in [['--plot-sample', 'LAdrenalMet_A31E-0018_CRUK_PC_0018_M3'],
                            ['--plot-id', 'LAdrenalMet_A31E-0018_CRUK_PC_0018_M3:chr1:cn_a']]:
@@ -345,7 +355,10 @@ class TestExecution:
                 capture_output=True,
                 text=True,
         )
-        assert result.returncode == 0
+        assert result.returncode == 0, f"Plotting execution failed: {result.stderr}"
+        plots_dir = os.path.join(tmpdir, 'plots', 'test_run')
+        plot_file = os.path.join(plots_dir, f'{plot_flags[1].replace(":", "_")}_events.png')
+        assert os.path.exists(plot_file), f"Plot was not created ({plot_file})"
 
 
     def test_clean(self, temp_workspace):
@@ -356,4 +369,4 @@ class TestExecution:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0
+        assert result.returncode == 0, f"Clean execution failed: {result.stderr}"
