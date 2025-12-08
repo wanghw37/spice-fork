@@ -4,13 +4,14 @@ from joblib import Parallel, delayed
 import pandas as pd
 import fstlib
 
-from spice.utils import get_logger, save_pickle, open_pickle, log_debug, resolve_data_file
+from spice.utils import get_logger, save_pickle, open_pickle, log_debug
+from spice.data_loaders import resolve_data_file, load_cn_tsv
 from spice.event_inference.fst_assets import nowgd_fst, get_diploid_fsa, T_forced_WGD
 from spice.event_inference.fsts import fsa_from_string
 from spice.event_inference.events_from_graph import create_events_df_from_single_path_solution
 from spice.event_inference.data_structures import ChromData
 from spice.preprocessing.preprocessing import merge_neighbours_mod, get_or_infer_wgd_status, get_or_infer_xy_status
-from spice import config, data_loaders
+from spice import config
 
 
 logger = get_logger('Split input')
@@ -60,7 +61,7 @@ def _prepare_split_inputs(name, keep_old=False, selected_ids=None):
     diploid_fsas = {b: get_diploid_fsa(total_copy_numbers=b) for b in [False, True]}
 
     log_debug(logger, f"Loading from input file: {copynumber_file}")
-    data = data_loaders.load_cn_tsv(copynumber_file)
+    data = load_cn_tsv(copynumber_file)
     data = data[['sample_id', 'chrom', 'start', 'end', 'cn_a', 'cn_b']]
     if data['sample_id'].str.contains(':').any():
         raise ValueError('Sample IDs in input file cannot contain ":" character.')

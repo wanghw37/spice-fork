@@ -8,14 +8,15 @@ import fire
 
 from spice import config
 from spice.utils import (
-    get_logger, save_pickle, open_pickle, chrom_id_from_id, create_full_df_from_diff_df,
-    calc_telomere_bound_whole_arm_whole_chrom, log_debug)
-from spice.event_inference.events_from_graph import full_paths_from_graph_with_sv, create_events_df_from_single_path_solution
+    save_pickle, open_pickle, chrom_id_from_id,
+    calc_telomere_bound_whole_arm_whole_chrom)
+from spice.logging import get_logger, log_debug
+from spice.event_inference.events_from_graph import (
+    full_paths_from_graph_with_sv, create_events_df_from_single_path_solution)
 from spice.event_inference.knn_graph import solve_with_knn
 from spice.event_inference.mcmc_for_large_chroms import mcmc_event_selection, create_best_events_df_from_mcmc
-from spice.event_inference.data_structures import ChromData, FullPaths
-from spice.pipeline_postprocessing import (
-    calc_summary_from_events_df, overlap_final_events_with_svs, calculate_final_events_knn_score)
+from spice.event_inference.data_structures import ChromData
+from spice.pipeline_postprocessing import calc_summary_from_events_df
 
 
 logger = get_logger('spice.pipeline')

@@ -1,0 +1,118 @@
+import logging
+import os
+from datetime import datetime
+import yaml
+
+# Global logging configuration (set by CLI or defaults)
+_LOGGING_CONFIG = {
+    'mode': 'terminal',  # 'terminal', 'file', or 'both'
+    'log_dir': None,
+    'config_name': None,
+    'level': 'INFO',
+    'file_handler': None,  # Shared file handler for all loggers
+    'configured': False
+}
+
+
+def configure_logging(log_mode, log_dir, config_name, level: str = 'INFO'):
+    """
+    Configure global logging settings for all SPICE loggers.
+    Should be called once by CLI before any logging occurs.
+
+    Args:
+        log_mode: 'terminal', 'file', or 'both'
+        log_dir: Directory for log files
+        config_name: Name from config (used in log filename)
+        level: Logging level string (e.g., 'INFO', 'DEBUG')
+    """
+    global _LOGGING_CONFIG
+
+    _LOGGING_CONFIG['mode'] = log_mode
+    _LOGGING_CONFIG['log_dir'] = log_dir
+    _LOGGING_CONFIG['config_name'] = config_name
+    _LOGGING_CONFIG['level'] = level
+    _LOGGING_CONFIG['configured'] = True
+
+    # Create shared file handler if needed
+    if log_mode in ['file', 'both']:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_filename = f"{config_name}_{timestamp}.log"
+        log_path = os.path.join(log_dir, log_filename)
+
+        os.makedirs(log_dir, exist_ok=True)
+        file_handler = logging.FileHandler(log_path)
+        formatter = logging.Formatter('*** %(name)s - %(levelname)s - %(asctime)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        _LOGGING_CONFIG['file_handler'] = file_handler
+
+        if log_mode == 'file':
+            print(f"Logging to file: {log_path}")
+
+
+def get_logger(name, load_config=True, config_file=None):
+    """
+    Get a logger that respects global logging configuration.
+
+    Args:
+        name: Logger name
+        load_config: Whether to load logging level from config (backward compatibility)
+        config_file: Config file to load (backward compatibility)
+
+    Returns:
+        Configured logger instance
+    """
+    global _LOGGING_CONFIG
+
+    # Determine logging level
+    if load_config:
+        if config_file is None:
+            if os.path.exists('../config.yaml'):
+                config_file = '../config.yaml'
+            elif os.path.exists('../default_config.yaml'):
+                config_file = '../default_config.yaml'
+
+    if _LOGGING_CONFIG['configured'] and _LOGGING_CONFIG.get('level'):
+        logging_level = _LOGGING_CONFIG['level']
+    else:
+        if config_file is not None:
+            with open(config_file, 'rt') as f:
+                config = yaml.safe_load(f.read())
+            logging_level = config['params']['logging_level']
+        else:
+            logging_level = "INFO"
+
+    logger = logging.getLogger(name)
+    logger.setLevel(logging_level)
+    logger.handlers.clear()  # Clear any existing handlers
+
+    formatter = logging.Formatter('*** %(name)s - %(levelname)s - %(asctime)s - %(message)s')
+
+    # If global config is set, use it; otherwise default to terminal
+    log_mode = _LOGGING_CONFIG['mode'] if _LOGGING_CONFIG['configured'] else 'terminal'
+
+    # Add terminal handler if needed
+    if log_mode in ['terminal', 'both']:
+        terminal_handler = logging.StreamHandler()
+        terminal_handler.setFormatter(formatter)
+        logger.addHandler(terminal_handler)
+
+    # Add file handler if needed and available
+    if log_mode in ['file', 'both'] and _LOGGING_CONFIG['file_handler'] is not None:
+        logger.addHandler(_LOGGING_CONFIG['file_handler'])
+
+    return logger
+
+
+def set_logging_level(logger, level):
+    logging_values = {
+        'silent': 'WARNING',
+        'verbose': 'DEBUG',
+    }
+    level = logging_values.get(level, level.upper())
+    assert level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+    logger.setLevel(level)
+
+
+def log_debug(logger, msg):
+    if logger.level == logging.DEBUG:
+        logger.debug(msg)

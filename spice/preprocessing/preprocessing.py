@@ -9,7 +9,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from spice import data_loaders, config, directories
-from spice.utils import get_logger, log_debug
+from spice.logging import get_logger, log_debug
 
 logger = get_logger('preprocessing')
 

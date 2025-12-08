@@ -10,7 +10,8 @@ from ortools.sat.python import cp_model
 import fstlib
 
 from spice import config
-from spice.utils import create_full_df_from_diff_df, get_logger, chrom_id_from_id, log_debug
+from spice.utils import create_full_df_from_diff_df, chrom_id_from_id
+from spice.logging import get_logger, log_debug
 from spice.event_inference.fst_assets import get_diploid_fsa, T_forced_WGD
 from spice.event_inference.fsts import fsa_from_string
 from spice.event_inference.data_structures import Diff, FullPaths

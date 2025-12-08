@@ -7,8 +7,8 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from spice import config, directories
-from spice.utils import (CALC_NEW, open_pickle, save_pickle, get_logger,
-                                 calc_telomere_bound_whole_arm_whole_chrom)
+from spice.utils import (CALC_NEW, open_pickle, save_pickle, get_logger, log_debug,
+                         calc_telomere_bound_whole_arm_whole_chrom)
 
 
 logger = get_logger('data_loaders')
@@ -16,7 +16,8 @@ CHROMS = ['chr' + str(x) for x in range(1, 23)] + ['chrX', 'chrY']
 DATA_LOADERS_DIR = os.path.join(directories['results_dir'], 'data_loaders')
 
 @CALC_NEW()
-def load_final_events_df(results_dir, skip_assertions=False, remove_multiple_wgds=True, skip_overlaps=False):
+def load_final_events_df_for_tsg_og(results_dir, skip_assertions=False, remove_multiple_wgds=True, skip_overlaps=False):
+    raise NotImplementedError('This function is deprecated; Revisit when I implement TSG/OG analysis again.')
 
     name = results_dir.split('/')[-1]
 
@@ -150,6 +151,40 @@ def load_final_events_df(results_dir, skip_assertions=False, remove_multiple_wgd
     assert skip_assertions or not final_events_df.isna().sum().any()
 
     print(f'Done! Final events have: {final_events_df["sample"].nunique()} samples, {final_events_df["id"].nunique()} IDs and {len(final_events_df)} events')
+    return final_events_df
+
+
+def resolve_data_file(return_raw=False) -> str:
+    """Resolve the chromosome segments file path.
+    """
+    from spice import config, directories
+    logger = get_logger('utils')
+
+    name = config.get('name')
+    data_dir = config['directories']['data_dir']
+    orig = config['input_files']['copynumber']
+    processed = os.path.join(data_dir, f"{name}_processed.tsv")
+    if not return_raw:
+        orig = orig.replace('.tsv', '_split.tsv')
+        processed = os.path.join(data_dir, f"{name}_processed_split.tsv")
+
+    # Prefer processed split file if available, else original
+    cur_file = orig
+    if processed and os.path.exists(processed):
+        cur_file = processed
+    
+    if not os.path.isabs(cur_file):
+        cur_file = os.path.join(directories['base_dir'], cur_file)
+    log_debug(logger, f"Resolved chrom_segments_file: {cur_file}")
+    return cur_file
+
+
+def load_final_events():
+    results_dir = os.path.join(directories['results_dir'], config['name'])
+    if not os.path.exists(os.path.join(results_dir, 'final_events.tsv')):
+        raise FileNotFoundError(f"final_events.tsv not found in dir {results_dir}. Run SPICE event inference first")
+    final_events_df = pd.read_csv(
+        os.path.join(results_dir, 'final_events.tsv'), sep='\t', dtype={'cn': str, 'diff': str})
     return final_events_df
 
 

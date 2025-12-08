@@ -9,13 +9,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import spice
-from spice import config, directories
+from spice import config
 from spice.event_inference.SV import (overlap_svs_with_events_df, overlap_svs_with_events_df_single,
                               load_pcawg_sv_data)
 from spice.utils import (
     get_logger, open_pickle, save_pickle, chrom_id_from_id, CALC_NEW, create_full_df_from_diff_df,
-    calc_telomere_bound_whole_arm_whole_chrom, set_logging_level, log_debug)
+    calc_telomere_bound_whole_arm_whole_chrom, log_debug)
 from spice.event_inference.knn_graph import load_knn_graph_train_data, calc_event_distances, EventDistData
 from spice.data_loaders import load_chrom_lengths, load_centromeres
 from spice.event_inference.events_from_graph import (

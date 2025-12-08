@@ -4,33 +4,9 @@
 import os
 import shutil
 import argparse
-from joblib import Parallel, delayed
 
 # Import base package only; defer submodule imports until after config is loaded
 import spice
-
-
-def _run_batch(cur_ids, cores, desc, func, logger):
-    """Run a batch of tasks either serially or in parallel."""
-    n_jobs = cores if (cores is not None and cores > 1) else 1
-    logger.info(f"{desc}: running on {n_jobs} core(s) for {len(cur_ids)} items")
-    
-    def _safe_func(cid):
-        try:
-            return func(cid)
-        except Exception as e:
-            logger.error(f"{desc}: failed for id '{cid}'", exc_info=False)
-            return {"id": cid, "status": "failed", "error": str(e), "step": desc}
-
-    if n_jobs == 1:
-        results = []
-        for i, cid in enumerate(cur_ids):
-            logger.info(f'{desc}: {i+1} / {len(cur_ids)} finished ({100*i/len(cur_ids):.1f}%) - {cid}')
-            results.append(_safe_func(cid))
-        return results
-    else:
-        return Parallel(n_jobs=n_jobs)(delayed(_safe_func)(cid) for cid in cur_ids)
-
 
 def main():
     """Main CLI entry point for SPICE."""
@@ -169,9 +145,9 @@ Examples:
     # Load configuration before importing submodules that may read it
     spice.load_config(args.config_path)
     from spice import config
-    from spice.utils import (
-        configure_logging, get_logger, save_fail_reports, load_final_events,
-        resolve_data_file, step_aware_cleanup)
+    from spice.data_loaders import load_final_events, resolve_data_file
+    from spice.logging import configure_logging, get_logger
+    from spice.cli_functions import save_fail_reports, step_aware_cleanup, _run_batch
     from spice.preprocessing.split_input import split_tsv_file
     from spice.event_inference.pipeline import (
         full_paths_from_graph_with_sv_wrapper, solve_with_knn_wrapper, solve_with_mcmc_wrapper,
