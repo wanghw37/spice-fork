@@ -306,6 +306,15 @@ class TestExecution:
             text=True,
         )
         assert result.returncode == 0
+        # Verify expected outputs exist
+        results_dir = os.path.join(tmpdir, 'results', 'test_run')
+        assert os.path.exists(os.path.join(results_dir, 'final_events.tsv')), "final_events.tsv was note created"
+        assert os.path.exists(os.path.join(results_dir, 'summary.tsv')), "summary.tsv was note created"
+        assert os.path.exists(os.path.join(results_dir, 'failed_reports.tsv')), "failed_reports.tsv was note created"
+        # Ensure the debug sample ID appears in the failure report
+        with open(os.path.join(results_dir, 'failed_reports.tsv'), 'r') as f:
+            content = f.read()
+            assert 'RPelvicLNMet_A12D-0020_CRUK_PC_0020_M3_DEBUG' in content
 
     def test_cores_execution(self, temp_workspace):
         tmpdir, config_path = temp_workspace
@@ -316,6 +325,15 @@ class TestExecution:
             text=True,
         )
         assert result.returncode == 0
+        # Verify expected outputs exist
+        results_dir = os.path.join(tmpdir, 'results', 'test_run')
+        assert os.path.exists(os.path.join(results_dir, 'final_events.tsv')), "final_events.tsv was note created"
+        assert os.path.exists(os.path.join(results_dir, 'summary.tsv')), "summary.tsv was note created"
+        assert os.path.exists(os.path.join(results_dir, 'failed_reports.tsv')), "failed_reports.tsv was note created"
+        # Ensure the debug sample ID appears in the failure report
+        with open(os.path.join(results_dir, 'failed_reports.tsv'), 'r') as f:
+            content = f.read()
+            assert 'RPelvicLNMet_A12D-0020_CRUK_PC_0020_M3_DEBUG' in content
 
     def test_potting(self, temp_workspace):
         tmpdir, config_path = temp_workspace
@@ -339,4 +357,3 @@ class TestExecution:
             text=True,
         )
         assert result.returncode == 0
-

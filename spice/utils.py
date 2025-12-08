@@ -670,7 +670,7 @@ def log_debug(logger, msg):
 
 def save_fail_reports(failed_reports, results_dir=None, logger=None):
     if results_dir is None:
-        from spice import directories
+        from spice import directories, config
         results_dir = directories['results_dir']
     if len(failed_reports) == 0:
         return pd.DataFrame(columns=['id', 'step', 'error', 'status'])
@@ -678,7 +678,7 @@ def save_fail_reports(failed_reports, results_dir=None, logger=None):
     for col in ['id', 'step', 'error', 'status']:
         if col not in df_fail.columns:
             df_fail[col] = None
-    fail_path = os.path.join(results_dir, 'failed_reports.tsv')
+    fail_path = os.path.join(results_dir, config['name'], 'failed_reports.tsv')
     df_fail[['id', 'step', 'error', 'status']].to_csv(fail_path, sep='\t', index=False)
     if logger is not None:
         logger.info(f"A total of {len(df_fail)} tasks failed during execution. "
