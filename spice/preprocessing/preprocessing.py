@@ -249,6 +249,9 @@ def get_or_infer_wgd_status(data, total_cn=False):
     wgd_status_file = config['input_files'].get('wgd_status', None)
     if wgd_status_file is not None and wgd_status_file != 'None' and wgd_status_file != '':
         wgd_status = pd.read_csv(wgd_status_file, sep='\t', index_col=0, dtype={'wgd': bool})['wgd']
+        missing_samples = set(data['sample_id'].unique()) - set(wgd_status.index)
+        if len(missing_samples) > 0:
+            raise ValueError(f'Samples missing in WGD status file: {missing_samples}')
     else:
         wgd_status = infer_wgd_status(
             data,
@@ -273,6 +276,9 @@ def get_or_infer_xy_status(data):
     xy_file = config['input_files'].get('xy_samples', None)
     if xy_file is not None and xy_file != 'None' and xy_file != '':
         xy_status = pd.read_csv(xy_file, sep='\t', index_col=0, dtype={'xy': bool})['xy']
+        missing_samples = set(data['sample_id'].unique()) - set(xy_status.index)
+        if len(missing_samples) > 0:
+            raise ValueError(f'Samples missing in XY status file: {missing_samples}')
     else:
         xy_status = pd.DataFrame({'xy': False},
                                  index=data['sample_id'].unique()).astype(bool)['xy']
