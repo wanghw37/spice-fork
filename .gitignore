@@ -20,6 +20,7 @@ build
 *.pickle
 *.placeholder
 *.tsv
+*.yaml
 
 logs/*
 results/*
