@@ -3,11 +3,8 @@
 
 import os
 import shutil
-import yaml
 import argparse
 from joblib import Parallel, delayed
-
-import pandas as pd
 
 # Import base package only; defer submodule imports until after config is loaded
 import spice
@@ -22,7 +19,7 @@ def _run_batch(cur_ids, cores, desc, func, logger):
         try:
             return func(cid)
         except Exception as e:
-            logger.error(f"{desc}: failed for id '{cid}' with error: {e}", exc_info=True)
+            logger.error(f"{desc}: failed for id '{cid}'", exc_info=False)
             return {"id": cid, "status": "failed", "error": str(e), "step": desc}
 
     if n_jobs == 1:
@@ -175,7 +172,6 @@ Examples:
     from spice.utils import configure_logging, get_logger, save_fail_reports
     from spice.preprocessing.split_input import split_tsv_file
     from spice.utils import open_pickle, log_debug, resolve_data_file, step_aware_cleanup
-    from spice import plot as spice_plot
     from spice.event_inference.pipeline import (
         full_paths_from_graph_with_sv_wrapper, solve_with_knn_wrapper, solve_with_mcmc_wrapper,
         combine_final_events)
@@ -372,6 +368,8 @@ Examples:
     # Optional plotting step
     if 'plot' in which:
         import pandas as pd
+        # Lazy import of plotting module to avoid heavy dependencies unless needed
+        from spice import plot as spice_plot
         from matplotlib import pyplot as plt
 
         logger.info('Starting plotting of inferred events')
