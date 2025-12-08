@@ -139,6 +139,18 @@ def resolve_data_file(return_raw=False) -> str:
     return cur_file
 
 
+def load_final_events():
+    from spice import config, directories
+    from spice.utils import get_logger
+    logger = get_logger('utils')
+    results_dir = os.path.join(directories['results_dir'], config['name'])
+    if not os.path.exists(os.path.join(results_dir, 'final_events.tsv')):
+        raise FileNotFoundError(f"final_events.tsv not found in dir {results_dir}. Run SPICE event inference first")
+    final_events_df = pd.read_csv(
+        os.path.join(results_dir, 'final_events.tsv'), sep='\t', dtype={'cn': str, 'diff': str})
+    return final_events_df
+
+
 def step_aware_cleanup(results_dir, requested_steps=None):
     """Delete artifacts from the first requested step onward, including preprocessing.
 

@@ -169,9 +169,10 @@ Examples:
     # Load configuration before importing submodules that may read it
     spice.load_config(args.config_path)
     from spice import config
-    from spice.utils import configure_logging, get_logger, save_fail_reports
+    from spice.utils import (
+        configure_logging, get_logger, save_fail_reports, load_final_events,
+        resolve_data_file, step_aware_cleanup)
     from spice.preprocessing.split_input import split_tsv_file
-    from spice.utils import open_pickle, log_debug, resolve_data_file, step_aware_cleanup
     from spice.event_inference.pipeline import (
         full_paths_from_graph_with_sv_wrapper, solve_with_knn_wrapper, solve_with_mcmc_wrapper,
         combine_final_events)
@@ -375,26 +376,14 @@ Examples:
         logger.info('Starting plotting of inferred events')
 
         # Validate plot target
-        if args.plot_sample is None and args.plot_id is None:
-            logger.error('Plot step requires either --plot-sample or --plot-id')
-            return
-        if args.plot_sample is not None and args.plot_id is not None:
-            logger.error('Provide only one of --plot-sample or --plot-id')
+        if not ((args.plot_sample is not None) ^ (args.plot_id is not None)):
+            logger.error('Plot step requires exactly one of --plot-sample or --plot-id')
             return
 
         # Load required inputs
-        if not os.path.exists(os.path.join(results_dir, 'final_events.tsv')):
-            logger.error(f"final_events.tsv not found in {results_dir}. Run 'combine' first.")
-            return
-
         chrom_segments = pd.read_csv(
             chrom_segments_file, sep='\t', index_col=['sample_id', 'chrom', 'allele']).sort_index()
-        final_events_df = pd.read_csv(
-            os.path.join(results_dir, 'final_events.tsv'), sep='\t', dtype={'cn': str, 'diff': str})
-
-
-        # assert that exactly one of args.plot_sample or args.plot_id is not None
-        assert (args.plot_sample is not None) ^ (args.plot_id is not None), 'For plotting either --plot-sample or --plot-id have to be set'
+        final_events_df = load_final_events()
 
         if args.plot_sample is not None:
             cur_sample = args.plot_sample
