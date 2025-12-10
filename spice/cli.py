@@ -258,7 +258,9 @@ Examples:
                     skip_loh_checks=True,
                 )
             results = _run_batch(cur_ids, args.cores, f'All solutions ({wgd_status})', run_full_paths, logger)
-            failed_reports.extend([r for r in results if isinstance(r, dict) and r.get('status') == 'failed'])
+            cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']
+            failed_reports.extend(cur_failed_reports)
+            save_fail_reports(cur_failed_reports, cur_step=wgd_status + '_all_solutions')
         save_fail_reports(failed_reports)
 
     if 'disambiguate' in which:
@@ -288,7 +290,9 @@ Examples:
                     single_width_bin=True
                 )
             results = _run_batch(cur_ids, args.cores, f'Disambiguate solutions ({wgd_status})', run_knn, logger)
-            failed_reports.extend([r for r in results if isinstance(r, dict) and r.get('status') == 'failed'])
+            cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']
+            failed_reports.extend(cur_failed_reports)
+            save_fail_reports(cur_failed_reports, cur_step=wgd_status + '_disambiguate')
         save_fail_reports(failed_reports)
 
 
@@ -320,7 +324,9 @@ Examples:
                     perform_loh_checks=True
                 )
             results = _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
-            failed_reports.extend([r for r in results if isinstance(r, dict) and r.get('status') == 'failed'])
+            cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']
+            failed_reports.extend(cur_failed_reports)
+            save_fail_reports(cur_failed_reports, cur_step=wgd_status + '_large_chroms')
         save_fail_reports(failed_reports)
 
 

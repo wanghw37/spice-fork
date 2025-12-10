@@ -6,7 +6,7 @@ from joblib import Parallel, delayed
 from spice.utils import log_debug
 
 
-def save_fail_reports(failed_reports, results_dir=None, logger=None):
+def save_fail_reports(failed_reports, results_dir=None, cur_step=None, logger=None):
     if results_dir is None:
         from spice import directories, config
         results_dir = directories['results_dir']
@@ -16,7 +16,7 @@ def save_fail_reports(failed_reports, results_dir=None, logger=None):
     for col in ['id', 'step', 'error', 'status']:
         if col not in df_fail.columns:
             df_fail[col] = None
-    fail_path = os.path.join(results_dir, config['name'], 'failed_reports.tsv')
+    fail_path = os.path.join(results_dir, config['name'], f'failed_reports{("_" + cur_step) if cur_step is not None else ""}.tsv')
     df_fail[['id', 'step', 'error', 'status']].to_csv(fail_path, sep='\t', index=False)
     if logger is not None:
         logger.info(f"A total of {len(df_fail)} tasks failed during execution. "
