@@ -13,12 +13,6 @@ from spice.logging import get_logger, log_debug
 
 logger = get_logger('preprocessing')
 
-DATA_DIR_PREPROCESS = '/Users/tom/phd/projects/signatures/data/pcawg/preprocess'
-RAW_DATA_FOLDER = '/Users/tom/phd/projects/signatures/data/pcawg_final/consensus.20170119.somatic.cna.annotated'
-SUPP_FILE_1 = "/Users/tom/phd/projects/cn_data/cnsistent/data/pcawg_supplementary_table_1.tsv"
-SAVE_CHECKPOINTS = True
-CHR_LENS = data_loaders.load_chrom_lengths().to_dict()
-
 
 def fill_gaps_cnsistent(cns_df, print_info=False):
     # Iterate over the rows
@@ -99,8 +93,9 @@ def add_tails_cnsistent(cns_df, chr_lengths, print_info=False):
 
 def fill_gaps_cnsistent_wrapper(data, print_info=False):
     '''adjusted from cns.process.pipelines.main_fill'''
+    chrom_lengths_dict = data_loaders.load_chrom_lengths().to_dict()
     data = data.reset_index(drop=True)
-    cna_tailed_df = add_tails_cnsistent(data, CHR_LENS, print_info=print_info)
+    cna_tailed_df = add_tails_cnsistent(data, chrom_lengths_dict, print_info=print_info)
     cna_filled_df = fill_gaps_cnsistent(cna_tailed_df, print_info=print_info)
     assert cna_filled_df['chrom'].str.startswith('chr').all()
 
