@@ -321,7 +321,8 @@ def mcmc_event_selection(
         (not has_wgd and any([event[0]==event[1] for event in overall_best_events]))):
         raise ValueError('Invalid empty event (start == end) found. This is due to incorrect distance calculation')
     
-    log_debug(logger, f'Finished LOH check')
+    if not skip_loh_check:
+        log_debug(logger, f'Finished final LOH check')
     best_events_data, overall_best_score = calc_event_distances_mcmc_wrapper(
         overall_best_events, knn_train_data, knn_graph_k, cur_chrom,
         cur_segment_breakpoints_starts, cur_segment_breakpoints_ends, cn_profile, centro_start,
