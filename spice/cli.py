@@ -161,6 +161,7 @@ Examples:
     
     # Create logger AFTER imports to avoid it being disabled by medicc's logging.config.dictConfig
     log_level = 'DEBUG' if args.debug else config['params'].get('logging_level', 'INFO')
+
     configure_logging(
         log_mode=args.log,
         log_dir=config['directories']['log_dir'],
@@ -168,6 +169,9 @@ Examples:
         level=log_level,
     )
     logger = get_logger('SPICE', spice_prefix=False)
+
+    if args.debug and args.cores and args.cores > 1:
+        logger.warning("Debug mode with multiple cores may lead to interleaved log messages.")
 
     name = config['name']
     if ' ' in name:
@@ -425,6 +429,8 @@ Examples:
     save_fail_reports(failed_reports, logger=logger)
 
     logger.info(f'Done. Results are in {results_dir}')
+
+    # ...existing code...
 
 
 if __name__ == '__main__':

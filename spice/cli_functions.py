@@ -115,18 +115,37 @@ def _run_batch(cur_ids, cores, desc, func, logger):
     """Run a batch of tasks either serially or in parallel."""
     n_jobs = cores if (cores is not None and cores > 1) else 1
     logger.info(f"{desc}: running on {n_jobs} core(s) for {len(cur_ids)} items")
-    def _safe_func(cid):
-        try:
-            return func(cid)
-        except Exception as e:
-            logger.error(f"{desc}: failed for id '{cid}'", exc_info=False)
-            return {"id": cid, "status": "failed", "error": str(e), "step": desc}
     if n_jobs == 1:
+        def _safe_func(cid):
+            try:
+                return func(cid)
+            except Exception as e:
+                logger.error(f"{desc}: failed for id '{cid}'", exc_info=False)
+                return {"id": cid, "status": "failed", "error": str(e), "step": desc}
         results = []
         for i, cid in enumerate(cur_ids):
             logger.info(f'{desc}: {i+1} / {len(cur_ids)} ({100*i/len(cur_ids):.1f}%) - {cid}')
             results.append(_safe_func(cid))
         return results
     else:
-        return Parallel(n_jobs=n_jobs)(delayed(_safe_func)(cid) for cid in cur_ids)
-
+        from tqdm import tqdm
+        from threading import Lock
+        lock = Lock()
+        pbar = tqdm(total=len(cur_ids), desc=desc, position=0)
+        progress = {'count': 0}
+        log_every = max(10, len(cur_ids) // 10)
+        def _safe_func_parallel(cid):
+            try:
+                result = func(cid)
+            except Exception as e:
+                logger.error(f"{desc}: failed for id '{cid}'", exc_info=False)
+                result = {"id": cid, "status": "failed", "error": str(e), "step": desc}
+            with lock:
+                progress['count'] += 1
+                pbar.update(1)
+                if progress['count'] % log_every == 0 or progress['count'] == len(cur_ids):
+                    logger.info(f'{desc}: {progress["count"]} / {len(cur_ids)} ({100*progress["count"]/len(cur_ids):.1f}%)')
+            return result
+        results = Parallel(n_jobs=n_jobs, backend='threading')(delayed(_safe_func_parallel)(cid) for cid in cur_ids)
+        pbar.close()
+        return results
