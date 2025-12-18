@@ -27,7 +27,6 @@ def configure_logging(log_mode, log_dir, config_name, level: str = 'INFO'):
     """
     global _LOGGING_CONFIG
 
-
     _LOGGING_CONFIG['mode'] = log_mode
     _LOGGING_CONFIG['log_dir'] = log_dir
     _LOGGING_CONFIG['config_name'] = config_name
@@ -46,8 +45,6 @@ def configure_logging(log_mode, log_dir, config_name, level: str = 'INFO'):
         file_handler.setFormatter(formatter)
         _LOGGING_CONFIG['file_handler'] = file_handler
 
-        if log_mode == 'file':
-            print(f"Logging to file: {log_path}")
 
     # Set the level for all active loggers
     logging_level = level.upper()
@@ -58,11 +55,24 @@ def configure_logging(log_mode, log_dir, config_name, level: str = 'INFO'):
     logging_level = logging_values.get(logging_level, logging_level)
     assert logging_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
     for logger_name in list(logging.Logger.manager.loggerDict.keys()):
+        if 'spice' not in logger_name.lower():
+            continue
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging_level)
+        # Remove all handlers
+        logger.handlers.clear()
+        formatter = logging.Formatter('*** %(name)s - %(levelname)s - %(asctime)s - %(message)s')
+        # Add terminal handler if needed
+        if log_mode in ['terminal', 'both']:
+            terminal_handler = logging.StreamHandler()
+            terminal_handler.setFormatter(formatter)
+            logger.addHandler(terminal_handler)
+        # Add file handler if needed and available
+        if log_mode in ['file', 'both'] and _LOGGING_CONFIG['file_handler'] is not None:
+            logger.addHandler(_LOGGING_CONFIG['file_handler'])
 
 
-def get_logger(name, load_config=True, config_file=None):
+def get_logger(name, spice_prefix=True, load_config=True, config_file=None):
     """
     Get a logger that respects global logging configuration.
 
@@ -94,6 +104,8 @@ def get_logger(name, load_config=True, config_file=None):
         else:
             logging_level = "INFO"
 
+    if spice_prefix and not name.startswith('spice.'):
+        name = f'spice.{name}'
     logger = logging.getLogger(name)
     logger.setLevel(logging_level)
     logger.handlers.clear()  # Clear any existing handlers
