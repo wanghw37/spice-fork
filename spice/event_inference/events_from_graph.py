@@ -48,7 +48,6 @@ def full_paths_from_graph_with_sv(cur_id, is_wgd, sv_data, chrom_segments, chrom
             cur_chrom_segments=cur_chrom_segments,
             use_cache=use_cache,
             all_loh_solutions=all_loh_solutions,
-            time_limit_loh_filters=time_limit_loh_filters,
             sv_matching_threshold=sv_matching_threshold,
             total_cn=total_cn,
             skip_loh_checks=skip_loh_checks,
