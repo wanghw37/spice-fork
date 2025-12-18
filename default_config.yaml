@@ -14,7 +14,7 @@ params:
   # Preprocessing
   wgd_inference_method: 'major_cn' # can be 'major_cn' or 'ploidy_loh'
   # Top-level parameters
-  skip_existing: True # Test whether output files already exist and skip computation if so
+  skip_existing: False # Test whether output files already exist and skip computation if so
   # Thresholds for number of events
   dist_limit: 40 # Maximum number of events to consider
   full_path_dist_limit: 9 # Above this number of events, do not attempt full path finding
