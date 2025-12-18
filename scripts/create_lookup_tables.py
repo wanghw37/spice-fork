@@ -33,7 +33,7 @@ from spice import config
 from spice.utils import log_debug, save_pickle, get_logger
 
 # Set up logging
-logger = get_logger('create_lookup_tables', load_config=True)
+logger = get_logger('spice.create_lookup_tables', load_config=True)
 logging.getLogger('spice.events_from_graph').setLevel(logging.WARNING)
 
 
@@ -50,7 +50,6 @@ def create_full_path_from_profile(cn_profile, is_wgd):
             diffs = loh_filters_for_graph_result_diffs_wgd(
                 diffs,
                 cn_profile,
-                single_time_limit=config['params'].get('time_limit_loh_filters', 60),
                 return_all_solutions=False,
                 total_cn=False,
                 shuffle_diffs=True,
@@ -71,7 +70,6 @@ def create_full_path_from_profile(cn_profile, is_wgd):
             diffs = loh_filters_for_graph_result_diffs(
                 diffs,
                 cn_profile,
-                single_time_limit=config['params'].get('time_limit_loh_filters', 60),
                 total_cn=False,
                 return_all_solutions=False,
                 shuffle_diffs=True,

@@ -32,7 +32,7 @@ params:
   # Time limits (in seconds, per chromosome)
   time_limit_all_solutions: 60
   time_limit_loh_filters: None
-  time_limit_mcmc: 60
+  time_limit_mcmc: 120
   # Cluster parameters for Snakemake
   knn_mem: 16000
   full_path_mem: 16000

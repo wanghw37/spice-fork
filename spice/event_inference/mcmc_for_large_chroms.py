@@ -56,6 +56,7 @@ def mcmc_event_selection(
         loh_time_limit=None,
         check_all_loh_solutions=False,
         perform_loh_checks=None, # not yet implemented
+        skip_loh_check=False,
         knn_train_data='sv_and_unamb',
         loh_check_before_distance_calculation=False, # needed to compare results with knn
         total_cn=False,
@@ -165,8 +166,8 @@ def mcmc_event_selection(
         if n_sv_overlaps > 0 and 0 in cn_profile:
             log_debug(logger, 'Testing LOH-viability for initial solution')
             diffs = create_diff_and_check_loh(
-                event_proposal, cn_profile, has_wgd, total_cn=total_cn,
-                use_cache=True, check_all_solutions=False, single_time_limit=loh_time_limit)
+                event_proposal, cn_profile, has_wgd, total_cn=total_cn, skip_loh_check=skip_loh_check,
+                use_cache=True, check_all_solutions=False)
             if len(diffs) == 0:
                 log_debug(logger, 'Initial solution using SVs was not compatible with LOHs -> rerunning without SVs')
                 sv_selected_score = 0
@@ -203,7 +204,7 @@ def mcmc_event_selection(
         # a subsequent event but takes more time
         if loh_check_before_distance_calculation and 0 in cn_profile:
             diffs = create_diff_and_check_loh(
-                event_proposal, cn_profile, has_wgd, total_cn=total_cn,
+                event_proposal, cn_profile, has_wgd, total_cn=total_cn, skip_loh_check=skip_loh_check,
                 use_cache=True, check_all_solutions=False, single_time_limit=loh_time_limit)
             if len(diffs) == 0:
                 logger.debug(f'{iteration}: proposal rejected because early loh filter failed')
@@ -259,7 +260,7 @@ def mcmc_event_selection(
 
             if diffs is None: # only calculate diffs weren't already created in the loop
                 diffs = create_diff_and_check_loh(
-                    event_proposal, cn_profile, has_wgd, total_cn=total_cn,
+                    event_proposal, cn_profile, has_wgd, total_cn=total_cn, skip_loh_check=skip_loh_check,
                     use_cache=True, check_all_solutions=False, single_time_limit=loh_time_limit)
             if len(diffs) != 1:
                 logger.debug(f'{iteration}: no LOH viable solution found, rejecting proposal')
@@ -302,7 +303,7 @@ def mcmc_event_selection(
 
     # this needs to be done in case LOHs shorten subsequent events
     overall_best_diffs = create_diff_and_check_loh(
-        overall_best_events, cn_profile, has_wgd, total_cn=total_cn,
+        overall_best_events, cn_profile, has_wgd, total_cn=total_cn, skip_loh_check=skip_loh_check,
         use_cache=True, check_all_solutions=(has_loh and check_all_loh_solutions),
         single_time_limit=loh_time_limit)
     if len(overall_best_diffs) != 1:
@@ -381,6 +382,11 @@ def mcmc_event_selection_TEST(
         top_n_candidates=100,
         total_cn=False,
         return_full=False):
+    '''
+    Alternative MCMC that tracks top N candidates and checks LOH at the end (similar to how KNN does it now).
+    Does not work yet, the problem is that it doesn not explore the space well because it gets stuck in solutions
+    that have a low score but which are not LOH compatible.
+    '''
     
     raise NotImplementedError('Does not work yet, the problem is that it doesn not explore the space well because it gets stuck in solutions that have a low score but which are not LOH compatible.')
     
@@ -592,7 +598,7 @@ def mcmc_event_selection_TEST(
 
             if diffs is None: # only calculate diffs weren't already created in the loop
                 diffs = create_diff_and_check_loh(
-                    event_proposal, cn_profile, has_wgd, total_cn=total_cn, skip_loh_check=True,
+                    event_proposal, cn_profile, has_wgd, total_cn=total_cn, skip_loh_check=skip_loh_check,
                     use_cache=True, check_all_solutions=False, single_time_limit=loh_time_limit)
             if len(diffs) != 1:
                 logger.debug(f'{iteration}: no LOH viable solution found, rejecting proposal (len(diffs) = {len(diffs)}, diffs = {diffs})')
@@ -920,11 +926,11 @@ def _create_diff_and_check_loh_impl(event_proposal, cn_profile, has_wgd=False, c
     #         cur_diffs_hash = (hash(cur_diffs[0][0].tobytes()), hash(cur_diffs[0][1].tobytes()))
     #         loh_passed = loh_lookup.get(cur_diffs_hash)
             diffs_final = loh_filters_for_graph_result_diffs_wgd(
-                diffs, cn_profile, single_time_limit=single_time_limit, return_all_solutions=check_all_solutions,
+                diffs, cn_profile, return_all_solutions=check_all_solutions,
                 shuffle_diffs=True, total_cn=total_cn)
         else:
             diffs_final = loh_filters_for_graph_result_diffs(
-                diffs, cn_profile, single_time_limit=single_time_limit, return_all_solutions=check_all_solutions,
+                diffs, cn_profile, return_all_solutions=check_all_solutions,
                 shuffle_diffs=True, total_cn=total_cn)
 
         # if mulitple diffs are created, choose the one with the fewest number of affected segments

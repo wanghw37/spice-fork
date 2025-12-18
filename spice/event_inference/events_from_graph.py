@@ -170,7 +170,7 @@ def _full_paths_from_graph_with_sv_nowgd(
 
     if not skip_loh_checks and 0 in cn_profile:
         diffs = loh_filters_for_graph_result_diffs(
-            diffs, cn_profile, single_time_limit=time_limit_loh_filters, total_cn=total_cn,
+            diffs, cn_profile, total_cn=total_cn,
             return_all_solutions=all_loh_solutions, shuffle_diffs=True)
 
         log_debug(logger, f"{len(diffs)} solutions after LOH filters")
@@ -184,7 +184,7 @@ def _full_paths_from_graph_with_sv_nowgd(
 
 def _full_paths_from_graph_with_sv_wgd(
         cn_profile, cur_sv_data, cur_chrom_segments, total_cn=False, skip_loh_checks=False,
-        use_cache=True, time_limit_loh_filters=60, all_loh_solutions=True,
+        use_cache=True, all_loh_solutions=True,
         sv_matching_threshold=sv_matching_threshold, **kwargs):
     
     paths = get_events_from_graph_wgd(
@@ -204,7 +204,7 @@ def _full_paths_from_graph_with_sv_wgd(
     if not skip_loh_checks and 0 in cn_profile:
         log_debug(logger, f"Performing LOH filters (returning {'all solutions' if all_loh_solutions else 'a single solution'})")
         diffs = loh_filters_for_graph_result_diffs_wgd(
-            diffs, cn_profile, single_time_limit=time_limit_loh_filters, total_cn=total_cn,
+            diffs, cn_profile, total_cn=total_cn,
             return_all_solutions=all_loh_solutions, shuffle_diffs=True)
         logger.debug(f"{len(diffs)} solutions after LOH filters")
 
@@ -764,7 +764,7 @@ def loh_filters_for_graph_result_diffs(diffs, profile, single_time_limit=None, t
 
 
 def loh_filters_for_graph_result_diffs_wgd(
-        diffs, profile, single_time_limit=None, return_all_solutions=True, total_cn=False,
+        diffs, profile, return_all_solutions=True, total_cn=False,
         shuffle_diffs=True):
     log_debug(logger, f"Performing LOH filters (returning {'all solutions' if return_all_solutions else 'a single solution'})")
     log_debug(logger, f"number of initial solutions: {len(diffs)}")
@@ -893,7 +893,8 @@ def check_loh_for_full_paths(full_path, solutions=None):
             for cur_diff_pair in cur_diffs
         ]
         # log_debug(logger, cur_diffs)
-        filtered_diffs = loh_filters_for_graph_result_diffs_wgd(cur_diffs, full_path.cn_profile, return_all_solutions=False)
+        filtered_diffs = loh_filters_for_graph_result_diffs_wgd(
+            cur_diffs, full_path.cn_profile, return_all_solutions=False)
     else:
         cur_diffs = (
             [np.stack([np.fromiter(full_path.events[event].diff, dtype=int) * (1 if full_path.events[event].is_gain else -1)
@@ -1188,7 +1189,7 @@ def _check_loh_single_solution(solution, cn_profile, time_limit_loh_filters=60, 
     diffs = get_events_diff_from_coords_wgd([solution], cn_profile, lexsort_diffs=True, filter_missed_lohs=False)
     if 0 in cn_profile:
         diffs = loh_filters_for_graph_result_diffs_wgd(
-            diffs, cn_profile, single_time_limit=time_limit_loh_filters, total_cn=total_cn,
+            diffs, cn_profile, total_cn=total_cn,
             return_all_solutions=all_loh_solutions, shuffle_diffs=True)
     return len(diffs) > 0
 

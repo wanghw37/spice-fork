@@ -47,10 +47,11 @@ EVENT_DF_DTYPES = {
 }
 
 
-def full_paths_from_graph_with_sv_wrapper(cur_id, is_wgd, sv_data_file, chrom_segments_file, chrom_file,
-                                          sv_matching_threshold=10, time_limit_all_solutions=60, without_sv_output_dir=False,
-                                          time_limit_loh_filters=60, all_loh_solutions=True, total_cn=False,
-                                          skip_loh_checks=False, use_cache=True, save_output=True):
+def full_paths_from_graph_with_sv_wrapper(
+        cur_id, is_wgd, sv_data_file, chrom_segments_file, chrom_file,
+        sv_matching_threshold=10, without_sv_output_dir=False,
+        all_loh_solutions=True, total_cn=False,
+        skip_loh_checks=False, use_cache=True, save_output=True):
     
     # Implemente here to debug the creation of the fail report
     if cur_id == "RPelvicLNMet_A12D-0020_CRUK_PC_0020_M3_DEBUG:chr1:cn_a":
@@ -70,8 +71,8 @@ def full_paths_from_graph_with_sv_wrapper(cur_id, is_wgd, sv_data_file, chrom_se
     chrom = open_pickle(chrom_file)
 
     full_paths = full_paths_from_graph_with_sv(
-        cur_id, is_wgd, cur_sv_data, chrom_segments, chrom, time_limit=time_limit_all_solutions, path_limit=None,
-        time_limit_loh_filters=time_limit_loh_filters, sv_matching_threshold=sv_matching_threshold, total_cn=total_cn,
+        cur_id, is_wgd, cur_sv_data, chrom_segments, chrom, path_limit=None,
+        sv_matching_threshold=sv_matching_threshold, total_cn=total_cn,
         all_loh_solutions=all_loh_solutions, use_cache=use_cache, skip_loh_checks=skip_loh_checks)
 
     if len(full_paths.events) == 0 or len(full_paths.solutions) == 0:
@@ -208,10 +209,12 @@ def solve_with_knn_wrapper(cur_id, chrom_segments_file, full_paths_multiple_solu
         return final_events_df
 
 
-def solve_with_mcmc_wrapper(chrom_file, chrom_segments_file, sv_data_file, is_wgd, knn_train_data=None, k=250, wgd_split=True,
-                            output_file=None, sv_matching_threshold=10, n_iterations=None, n_iteration_scale=100, perform_loh_checks=False,
-                            min_T=1, max_T=-6, swap_event_based_on_score=True, check_all_loh_solutions=False, total_cn=False,
-                            verbose=False, save_all_scores=None, log_progress=False, show_progress=False, fail_on_empty=True):
+def solve_with_mcmc_wrapper(
+        chrom_file, chrom_segments_file, sv_data_file, is_wgd, knn_train_data=None, k=250, wgd_split=True,
+        output_file=None, sv_matching_threshold=10, n_iterations=None, n_iteration_scale=100, perform_loh_checks=False,
+        min_T=1, max_T=-6, swap_event_based_on_score=True, check_all_loh_solutions=False, total_cn=False,
+        verbose=False, save_all_scores=None, log_progress=False, show_progress=False, fail_on_empty=True,
+        skip_loh_check=False):
     assert (n_iterations is not None) ^ (n_iteration_scale is not None), 'Either n_iterations or n_iteration_scale must be provided'
 
     chrom_data = open_pickle(chrom_file, fail_if_nonexisting=True)
@@ -264,7 +267,9 @@ def solve_with_mcmc_wrapper(chrom_file, chrom_segments_file, sv_data_file, is_wg
                         total_cn=total_cn,
                         log_progress=log_progress,
                         calc_new_filename=None,
-                        calc_new_verbose=False)
+                        calc_new_verbose=False,
+                        skip_loh_check=skip_loh_check
+                        )
     
     # if it fails with SVs, rerun without them
     if mcmc_result is None and (cur_sv_data is not None and len(cur_sv_data) > 0):

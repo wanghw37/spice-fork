@@ -146,7 +146,7 @@ Examples:
     spice.load_config(args.config_path)
     from spice import config
     from spice.data_loaders import load_final_events, resolve_data_file
-    from spice.utils import timeout
+    from spice.utils import timeout, FunctionTimeoutError
     from spice.logging import configure_logging, get_logger
     from spice.cli_functions import save_fail_reports, step_aware_cleanup, _run_batch
     from spice.preprocessing.split_input import split_tsv_file
@@ -167,7 +167,7 @@ Examples:
         config_name=config['name'],
         level=log_level,
     )
-    logger = get_logger('SPICE')
+    logger = get_logger('SPICE', spice_prefix=False)
 
     name = config['name']
     if ' ' in name:
@@ -249,8 +249,6 @@ Examples:
                     sv_data_file=config['params'].get('sv_data_file', None),
                     chrom_file=os.path.join(results_dir, wgd_status, 'chrom_data_full', f'{cur_id}.pickle'),
                     sv_matching_threshold=config['params']['sv_matching_threshold'],
-                    time_limit_all_solutions=config['params']['time_limit_all_solutions'] ,
-                    time_limit_loh_filters=config['params']['time_limit_loh_filters'],
                     use_cache=config['params']['use_cache'],
                     total_cn=total_cn,
                     all_loh_solutions=config['params']['all_loh_solutions'],
@@ -295,7 +293,6 @@ Examples:
             save_fail_reports(cur_failed_reports, cur_step=wgd_status + '_disambiguate')
         save_fail_reports(failed_reports)
 
-
     if 'large_chroms' in which:
         logger.info('Starting MCMC inference for large chromosomes with many events')
         for wgd_status in ['nowgd', 'wgd']:
@@ -308,23 +305,30 @@ Examples:
             if selected_ids is not None:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
 
-            @timeout(config['params']['time_limit_mcmc'], mode="auto")
             def run_mcmc(cur_id):
-                return solve_with_mcmc_wrapper(
-                    output_file=os.path.join(results_dir, wgd_status, 'mcmc_solved_chroms_large', f'{cur_id}.pickle'),
-                    chrom_file=os.path.join(results_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
-                    is_wgd=is_wgd,
-                    chrom_segments_file=chrom_segments_file,
-                    sv_data_file=config['params'].get('sv_data_file', None),
-                    knn_train_data=None,
-                    k=config['params']['knn_k'],
-                    total_cn=total_cn,
-                    save_all_scores=None,
-                    n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
-                    log_progress=True,
-                    fail_on_empty=False,
-                    perform_loh_checks=True
-                )
+                @timeout(config['params']['time_limit_mcmc'], mode="auto")
+                def _solve_with_mcmc_wrapper(cur_id, skip_loh_check):
+                    return solve_with_mcmc_wrapper(
+                        output_file=os.path.join(results_dir, wgd_status, 'mcmc_solved_chroms_large', f'{cur_id}.pickle'),
+                        chrom_file=os.path.join(results_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
+                        is_wgd=is_wgd,
+                        chrom_segments_file=chrom_segments_file,
+                        sv_data_file=config['params'].get('sv_data_file', None),
+                        knn_train_data=None,
+                        k=config['params']['knn_k'],
+                        total_cn=total_cn,
+                        save_all_scores=None,
+                        n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
+                        log_progress=True,
+                        fail_on_empty=False,
+                        skip_loh_check=skip_loh_check
+                    )
+                try:
+                    return _solve_with_mcmc_wrapper(cur_id, skip_loh_check=False)
+                except FunctionTimeoutError as e:
+                    logger.warning(f'MCMC solving for {cur_id} timed out after {config["params"]["time_limit_mcmc"]} seconds. Will rerun with LOH checks skipped. This might lead to inaccurate results! Consider increasing "time_limit_mcmc" in the config file.')
+                    return _solve_with_mcmc_wrapper(cur_id, skip_loh_check=True)
+
             results = _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
             cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']
             failed_reports.extend(cur_failed_reports)
