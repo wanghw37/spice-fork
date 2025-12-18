@@ -207,6 +207,8 @@ Examples:
 
     # Clean old files
     if not args.keep_old and args.ids is None:
+        if config['params'].get('skip_existing', False):
+            raise ValueError("If skip_existing=True in config, have to use --keep-old to avoid deleting existing files.")
         logger.info('Cleaning old intermediate files')
         step_aware_cleanup(results_dir, which)
 
@@ -234,6 +236,7 @@ Examples:
 
     if 'all_solutions' in which:
         logger.info('Starting inference of all solutions')
+        skip_existing = config['params'].get('skip_existing', False)
         for wgd_status in ['nowgd', 'wgd']:
             is_wgd = (wgd_status == 'wgd')
             cur_ids = [x.replace('.pickle', '')
@@ -242,6 +245,10 @@ Examples:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
             @timeout(config['params']['time_limit_all_solutions'], mode="auto")
             def run_full_paths(cur_id):
+                output_file = os.path.join(results_dir, wgd_status, 'full_paths_multiple_solutions', f'{cur_id}.pickle')
+                if skip_existing and os.path.exists(output_file):
+                    logger.info(f"Skipping all_solutions for {cur_id} ({wgd_status}) as {output_file} exists.")
+                    return {'status': 'skipped', 'cur_id': cur_id, 'step': 'all_solutions'}
                 return full_paths_from_graph_with_sv_wrapper(
                     cur_id=cur_id,
                     is_wgd=(wgd_status == 'wgd'),
@@ -263,6 +270,7 @@ Examples:
 
     if 'disambiguate' in which:
         logger.info('Starting KNN disambiguation of solutions with multiple paths')
+        skip_existing = config['params'].get('skip_existing', False)
         full_paths_multiple_solutions_dirs=[os.path.join(results_dir, 'nowgd', 'full_paths_multiple_solutions'),
                                         os.path.join(results_dir, 'wgd', 'full_paths_multiple_solutions')]
         for wgd_status in ['nowgd', 'wgd']:
@@ -275,8 +283,12 @@ Examples:
             if selected_ids is not None:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
             def run_knn(cur_id):
+                output_file = os.path.join(results_dir, wgd_status, 'knn_solved_chroms', f'{cur_id}.pickle')
+                if skip_existing and os.path.exists(output_file):
+                    logger.info(f"Skipping disambiguate for {cur_id} ({wgd_status}) as {output_file} exists.")
+                    return {'status': 'skipped', 'cur_id': cur_id, 'step': 'disambiguate'}
                 return solve_with_knn_wrapper(
-                    output_file=os.path.join(results_dir, wgd_status, 'knn_solved_chroms', f'{cur_id}.pickle') ,
+                    output_file=output_file ,
                     cur_id=cur_id ,
                     is_wgd=is_wgd ,
                     chrom_segments_file=chrom_segments_file,
@@ -295,6 +307,7 @@ Examples:
 
     if 'large_chroms' in which:
         logger.info('Starting MCMC inference for large chromosomes with many events')
+        skip_existing = config['params'].get('skip_existing', False)
         for wgd_status in ['nowgd', 'wgd']:
             if not os.path.exists(os.path.join(str(results_dir), wgd_status, 'chrom_data_large')):
                 logger.warning(f"Directory {os.path.join(str(results_dir), wgd_status, 'chrom_data_large')} does not exist, skipping large chromosomes for {wgd_status}")
@@ -306,10 +319,14 @@ Examples:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
 
             def run_mcmc(cur_id):
+                output_file = os.path.join(results_dir, wgd_status, 'mcmc_solved_chroms_large', f'{cur_id}.pickle')
+                if skip_existing and os.path.exists(output_file):
+                    logger.info(f"Skipping large_chroms for {cur_id} ({wgd_status}) as {output_file} exists.")
+                    return {'status': 'skipped', 'cur_id': cur_id, 'step': 'large_chroms'}
                 @timeout(config['params']['time_limit_mcmc'], mode="auto")
                 def _solve_with_mcmc_wrapper(cur_id, skip_loh_check):
                     return solve_with_mcmc_wrapper(
-                        output_file=os.path.join(results_dir, wgd_status, 'mcmc_solved_chroms_large', f'{cur_id}.pickle'),
+                        output_file=output_file,
                         chrom_file=os.path.join(results_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
                         is_wgd=is_wgd,
                         chrom_segments_file=chrom_segments_file,
@@ -329,7 +346,7 @@ Examples:
                     logger.warning(f'MCMC solving for {cur_id} timed out after {config["params"]["time_limit_mcmc"]} seconds. Will rerun with LOH checks skipped. This might lead to inaccurate results! Consider increasing "time_limit_mcmc" in the config file.')
                     return _solve_with_mcmc_wrapper(cur_id, skip_loh_check=True)
 
-            results = _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
+            results = _run_batch(cur_ids[:2], args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
             cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']
             failed_reports.extend(cur_failed_reports)
             save_fail_reports(cur_failed_reports, cur_step=wgd_status + '_large_chroms')

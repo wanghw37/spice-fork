@@ -34,7 +34,7 @@ def step_aware_cleanup(results_dir, requested_steps=None):
     - Other artifacts under `results_dir` per WGD branch.
     """
     import shutil
-    from spice import config, directories
+    from spice import config
     from spice.utils import get_logger
     logger = get_logger('utils')
     name = config.get('name')
@@ -124,7 +124,7 @@ def _run_batch(cur_ids, cores, desc, func, logger):
     if n_jobs == 1:
         results = []
         for i, cid in enumerate(cur_ids):
-            logger.info(f'{desc}: {i+1} / {len(cur_ids)} finished ({100*i/len(cur_ids):.1f}%) - {cid}')
+            logger.info(f'{desc}: {i+1} / {len(cur_ids)} ({100*i/len(cur_ids):.1f}%) - {cid}')
             results.append(_safe_func(cid))
         return results
     else:
