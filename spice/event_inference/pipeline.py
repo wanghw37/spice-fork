@@ -17,6 +17,7 @@ from spice.event_inference.knn_graph import solve_with_knn
 from spice.event_inference.mcmc_for_large_chroms import mcmc_event_selection, create_best_events_df_from_mcmc
 from spice.event_inference.data_structures import ChromData
 from spice.pipeline_postprocessing import calc_summary_from_events_df
+from spice.event_analysis.final_events import classify_event_position
 
 
 logger = get_logger('spice.pipeline')
@@ -346,16 +347,24 @@ def combine_final_events(solved_dirs, chrom_segments_file=None, sv_data=None,
 
     if len(solved_events) == 0:
         raise ValueError('No solved events found in the provided directories')
-    final_events_df = pd.DataFrame(np.concatenate(solved_events, axis=0), columns=EVENT_DF_COLUMNS).astype(dtype=EVENT_DF_DTYPES)
+    final_events_df = pd.DataFrame(np.concatenate(solved_events, axis=0), columns=EVENT_DF_COLUMNS)
     log_debug(logger, f'Found a total of {len(final_events_df)} events in the final df')
-    final_events_df = final_events_df[EVENT_DF_COLUMNS]
 
-    missing_telomere_bound = (final_events_df[['telomere_bound', 'whole_arm', 'whole_chrom']] == None).any(axis=1)
+    # missing_telomere_bound has to be before types are assigned
+    missing_telomere_bound = np.logical_or(
+        (final_events_df[['telomere_bound', 'whole_arm', 'whole_chrom']] == None).any(axis=1),
+        (final_events_df[['telomere_bound', 'whole_arm', 'whole_chrom']].isna()).any(axis=1)
+    )
     final_events_df.loc[missing_telomere_bound, ['telomere_bound', 'whole_arm', 'whole_chrom']] = (
         np.stack(calc_telomere_bound_whole_arm_whole_chrom(final_events_df.loc[missing_telomere_bound]), axis=1))
 
+    final_events_df = final_events_df[EVENT_DF_COLUMNS]
+    final_events_df = final_events_df.astype(dtype=EVENT_DF_DTYPES)
+
     final_events_df = final_events_df.join((final_events_df.groupby('id')['wgd'].first() != 'nowgd').to_frame('has_wgd'), on='id')
     final_events_df['loh_shortened_event'] = final_events_df['diff'].map(lambda x: '0' in x[x.find('1'):x.rfind('1')])
+    final_events_df['pos'] = classify_event_position(final_events_df)
+
     # if knn_train_data is None:
     #     open_pickle(config['input_files']['knn_train'], fail_if_nonexisting=True)
     # unique_events_df = final_events_df.drop_duplicates(['id', 'diff', 'wgd']).copy().reset_index(drop=True)
