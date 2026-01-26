@@ -106,7 +106,7 @@ def set_config(config_path=None):
         if not os.environ.get('SPICE_CONFIG'):
             os.environ['SPICE_CONFIG'] = new_abs
         else:
-            cur_abs = os.path.abspath(cur_env)
+            cur_abs = os.path.abspath(os.environ['SPICE_CONFIG'])
             if cur_abs != new_abs:
                 import warnings
                 warnings.warn(
