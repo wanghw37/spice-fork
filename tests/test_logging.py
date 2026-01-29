@@ -6,7 +6,7 @@ import tempfile
 import pytest
 import logging
 
-from spice.utils import configure_logging, get_logger, _LOGGING_CONFIG
+from spice.logging import configure_logging, get_logger, _LOGGING_CONFIG
 
 
 @pytest.fixture
