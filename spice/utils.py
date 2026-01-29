@@ -10,16 +10,10 @@ import functools
 import threading
 import signal
 
-from tqdm.auto import tqdm
 import pandas as pd
 import numpy as np
-import yaml
 
-from scipy.stats import spearmanr, permutation_test
-
-# Import logging helpers from the dedicated module
-from spice.logging import get_logger, log_debug, configure_logging, set_logging_level
-
+from spice.logging import get_logger, log_debug
 
 def chrom_id_from_id(cur_id):
     return re.sub(':cn_[ab](:\d+$)?', '', cur_id)
