@@ -50,6 +50,13 @@ SPICE automatically installs the following dependencies:
 - joblib
 - ortools (version 9.8.3296)
 
+### Optional Dependencies
+
+To use SPICE with Snakemake for parallel execution on computing clusters, install snakemake separately:
+```bash
+pip install 'snakemake>=7.0'
+```
+
 
 ## Configuration
 
@@ -291,6 +298,11 @@ spice --config <path/to/config> --steps split+
 ### Using with Snakemake
 
 The SPICE Snakemake workflow mirrors the full event inference pipeline.
+
+**Note:** Snakemake must be installed separately:
+```bash
+pip install 'snakemake>=7.0'
+```
 
 ```bash
 # Local execution

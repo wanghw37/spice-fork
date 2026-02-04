@@ -26,5 +26,8 @@ setup(
         # needs to be installed using conda
         # 'openfst-python==1.8.2', 
     ],
+    extras_require={
+        'snakemake': ['snakemake>=7.0'],
+    },
     python_requires='>=3.8',
 )
