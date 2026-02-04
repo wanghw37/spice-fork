@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import yaml
 import collections.abc
+from typing import Optional
 
 def update_nested_dict(orig_dict, updated_values):
     '''
@@ -24,7 +25,7 @@ def _read_yaml(path):
     with open(path, 'rt') as f:
         return yaml.safe_load(f.read())
 
-def load_config(config_path: str | None = None, assert_exists: bool = True):
+def load_config(config_path: Optional[str] = None, assert_exists: bool = True):
     """
     Load SPICE configuration by merging default_config.yaml with an optional user config.
 
