@@ -314,6 +314,8 @@ spice --config <path/to/config> --snakemake --snakemake-mode local --snakemake-c
 spice --config <path/to/config> --snakemake --snakemake-mode slurm --snakemake-jobs 250
 ```
 
+**Note:** If you get a `LockException` run `spice --config configs/example_config.yaml --unlock` to remove the lock.
+
 ### Python API
 
 You can also import and use SPICE functions directly in Python. Note that it is important to run `spice.load_config(config_file)` before any other spice imports
