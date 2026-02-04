@@ -108,17 +108,19 @@ def main_event_inference(args):
             '--verbose',
             '--configfile', args.config_path,
             '--config', f'config_path={args.config_path}',
+             '--keep-going'
         ]
         
         # Pass skip_preprocessing to snakemake if set
         if args.skip_preprocessing:
             cmd.extend(['skip_preprocessing=True'])
         
-        # add number of jobs
+        # add execution mode and number of jobs/cores
         if args.snakemake_mode == 'slurm':
-            cmd.extend(['--slurm', '-j', str(args.snakemake_jobs), '--keep-going'])
+            cmd.extend(['--slurm', '-j', str(args.snakemake_jobs)])
         else:
-            cmd.extend(['-c', str(args.snakemake_cores)])
+            # Local mode: use --local-cores to ensure local execution and avoid cluster submission
+            cmd.extend(['--local-cores', str(args.snakemake_cores)])
 
         env = os.environ.copy()
         env['SPICE_CONFIG'] = os.path.abspath(args.config_path)
