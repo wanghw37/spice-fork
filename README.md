@@ -54,7 +54,7 @@ SPICE automatically installs the following dependencies:
 
 To use SPICE with Snakemake for parallel execution on computing clusters, install snakemake separately:
 ```bash
-pip install 'snakemake>=7.0'
+conda install bioconda::snakemake
 ```
 
 
@@ -303,7 +303,7 @@ The SPICE Snakemake workflow mirrors the full event inference pipeline.
 
 **Note:** Snakemake must be installed separately:
 ```bash
-pip install 'snakemake>=7.0'
+conda install bioconda::snakemake
 ```
 
 ```bash
