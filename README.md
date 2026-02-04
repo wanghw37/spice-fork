@@ -142,6 +142,8 @@ Example usage
 spice event_inference --config configs/example_config.yaml
 ```
 
+**For large datasets we recommend using the Snakemake mode on a computing cluster (see below)**.
+
 **Note that spice automatically deletes previous runs of the same name when it is rerun.**
 
 ### Event Inference
