@@ -93,6 +93,9 @@ SPICE has four main modes:
 
 ### 2.1 Top-level execution examples
 
+For event inference the example config `configs/events_example.yaml` can be used.
+For loci detection and assignment the example config `configs/loci_example.yaml` can be used.
+
 ```bash
 # Event inference
 spice event_inference --config configs/events_example.yaml
