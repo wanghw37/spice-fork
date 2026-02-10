@@ -30,7 +30,8 @@ from spice.event_inference.events_from_graph import (
     loh_filters_for_graph_result_diffs_wgd
 )
 from spice import config
-from spice.utils import log_debug, save_pickle, get_logger
+from spice.utils import save_pickle
+from spice.logging import log_debug, get_logger
 
 # Set up logging
 logger = get_logger('spice.create_lookup_tables', load_config=True)

@@ -69,7 +69,7 @@ rule detection:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle')
     output:
-        peaks=os.path.join(analysis_dir, 'detection', '{chrom}.pickle')
+        loci=os.path.join(analysis_dir, 'detection', '{chrom}.pickle')
     log:
         os.path.join(analysis_dir, 'logs', 'detection_{chrom}.log')
     run:
@@ -84,14 +84,14 @@ rule detection:
         
         detect_tsgs_ogs_for_all_length_scales(
             cur_chrom=wildcards.chrom,
-            output_dir=os.path.dirname(output.peaks),
-            filename=os.path.basename(output.peaks),
+            output_dir=os.path.dirname(output.loci),
+            filename=os.path.basename(output.loci),
             blocked_distance_th=2e5,
             force_up_down=True,
             N_iterations_base=3000,
             max_N_iterations=20_000,
             final_N_iterations=250_000,
-            N_peaks=100,
+            N_loci=100,
             max_fitness=1_000,
             length_scales_for_residuals=[0, 1, 2, 3, 4, 5, 6, 7],
             data_per_length_scale=data_per_length_scale
@@ -144,7 +144,7 @@ rule ranking:
     run:
         import spice
         from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import rank_peaks
+        from spice.tsg_og.detection import rank_loci
         
         logger = get_logger(f'ranking_{wildcards.chrom}', load_config=False)
         logger.info(f'Running ranking for {wildcards.chrom}')
@@ -152,7 +152,7 @@ rule ranking:
         data_per_length_scale = open_pickle(input.data_file)
         flipped_result = open_pickle(input.flipped)
         
-        rank_peaks(
+        rank_loci(
             cur_chrom=wildcards.chrom,
             best_selection_points=flipped_result,
             data_per_length_scale=data_per_length_scale,
@@ -273,28 +273,28 @@ rule optimizing_intermediate:
         logger.info(f'Optimizing intermediate complete for {wildcards.chrom}')
 
 
-rule peak_widths_intermediate:
+rule loci_widths_intermediate:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
         optimized=os.path.join(analysis_dir, 'optimizing_intermediate', '{chrom}.pickle')
     output:
-        widths=os.path.join(analysis_dir, 'peak_widths_intermediate', '{chrom}.pickle')
+        widths=os.path.join(analysis_dir, 'loci_widths_intermediate', '{chrom}.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'peak_widths_intermediate_{chrom}.log')
+        os.path.join(analysis_dir, 'logs', 'loci_widths_intermediate_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import infer_peak_widths
+        from spice.tsg_og.detection import infer_loci_widths
         
-        logger = get_logger(f'peak_widths_intermediate_{wildcards.chrom}', load_config=False)
-        logger.info(f'Running peak_widths_intermediate for {wildcards.chrom}')
+        logger = get_logger(f'loci_widths_intermediate_{wildcards.chrom}', load_config=False)
+        logger.info(f'Running loci_widths_intermediate for {wildcards.chrom}')
         
         data_per_length_scale = open_pickle(input.data_file)
         optimized_result = open_pickle(input.optimized)
         
         data_loaders_dir = os.path.join(results_dir, 'data_loaders', name)
         
-        infer_peak_widths(
+        infer_loci_widths(
             cur_chrom=wildcards.chrom,
             final_selection_points=optimized_result,
             data_loaders_dir=data_loaders_dir,
@@ -308,14 +308,14 @@ rule peak_widths_intermediate:
             filename=os.path.basename(output.widths)
         )
         
-        logger.info(f'Peak widths intermediate complete for {wildcards.chrom}')
+        logger.info(f'Locus widths intermediate complete for {wildcards.chrom}')
 
 
 rule merging:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
         optimized=os.path.join(analysis_dir, 'optimizing_intermediate', '{chrom}.pickle'),
-        widths=os.path.join(analysis_dir, 'peak_widths_intermediate', '{chrom}.pickle')
+        widths=os.path.join(analysis_dir, 'loci_widths_intermediate', '{chrom}.pickle')
     output:
         merged=os.path.join(analysis_dir, 'merging', '{chrom}.pickle')
     log:
@@ -323,7 +323,7 @@ rule merging:
     run:
         import spice
         from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import merge_overlapping_peaks
+        from spice.tsg_og.detection import merge_overlapping_loci
         
         logger = get_logger(f'merging_{wildcards.chrom}', load_config=False)
         logger.info(f'Running merging for {wildcards.chrom}')
@@ -332,10 +332,10 @@ rule merging:
         optimized_result = open_pickle(input.optimized)
         widths_result = open_pickle(input.widths)
         
-        merge_overlapping_peaks(
+        merge_overlapping_loci(
             cur_chrom=wildcards.chrom,
             selection_points=optimized_result,
-            peak_widths=widths_result,
+            loci_widths=widths_result,
             data_per_length_scale=data_per_length_scale,
             n_iterations_optim=10_000,
             show_progress_optim=False,
@@ -380,28 +380,28 @@ rule optimizing:
         logger.info(f'Optimizing complete for {wildcards.chrom}')
 
 
-rule peak_widths_intermediate_2:
+rule loci_widths_intermediate_2:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
         optimized=os.path.join(analysis_dir, 'optimizing', '{chrom}.pickle')
     output:
-        widths=os.path.join(analysis_dir, 'peak_widths_intermediate_2', '{chrom}.pickle')
+        widths=os.path.join(analysis_dir, 'loci_widths_intermediate_2', '{chrom}.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'peak_widths_intermediate_2_{chrom}.log')
+        os.path.join(analysis_dir, 'logs', 'loci_widths_intermediate_2_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import infer_peak_widths
+        from spice.tsg_og.detection import infer_loci_widths
         
-        logger = get_logger(f'peak_widths_intermediate_2_{wildcards.chrom}', load_config=False)
-        logger.info(f'Running peak_widths_intermediate_2 for {wildcards.chrom}')
+        logger = get_logger(f'loci_widths_intermediate_2_{wildcards.chrom}', load_config=False)
+        logger.info(f'Running loci_widths_intermediate_2 for {wildcards.chrom}')
         
         data_per_length_scale = open_pickle(input.data_file)
         optimized_result = open_pickle(input.optimized)
         
         data_loaders_dir = os.path.join(results_dir, 'data_loaders', name)
         
-        infer_peak_widths(
+        infer_loci_widths(
             cur_chrom=wildcards.chrom,
             final_selection_points=optimized_result,
             data_loaders_dir=data_loaders_dir,
@@ -415,34 +415,34 @@ rule peak_widths_intermediate_2:
             filename=os.path.basename(output.widths)
         )
         
-        logger.info(f'Peak widths intermediate 2 complete for {wildcards.chrom}')
+        logger.info(f'Locus widths intermediate 2 complete for {wildcards.chrom}')
 
 
-rule filter_peaks_intermediate_1:
+rule filter_loci_intermediate_1:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
         optimized=os.path.join(analysis_dir, 'optimizing', '{chrom}.pickle'),
-        widths=os.path.join(analysis_dir, 'peak_widths_intermediate_2', '{chrom}.pickle')
+        widths=os.path.join(analysis_dir, 'loci_widths_intermediate_2', '{chrom}.pickle')
     output:
-        filtered=os.path.join(analysis_dir, 'filter_peaks_intermediate_1', '{chrom}.pickle')
+        filtered=os.path.join(analysis_dir, 'filter_loci_intermediate_1', '{chrom}.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'filter_peaks_intermediate_1_{chrom}.log')
+        os.path.join(analysis_dir, 'logs', 'filter_loci_intermediate_1_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import filter_peaks
+        from spice.tsg_og.detection import filter_loci
         
-        logger = get_logger(f'filter_peaks_intermediate_1_{wildcards.chrom}', load_config=False)
-        logger.info(f'Running filter_peaks_intermediate_1 for {wildcards.chrom}')
+        logger = get_logger(f'filter_loci_intermediate_1_{wildcards.chrom}', load_config=False)
+        logger.info(f'Running filter_loci_intermediate_1 for {wildcards.chrom}')
         
         data_per_length_scale = open_pickle(input.data_file)
         optimized_result = open_pickle(input.optimized)
         widths_result = open_pickle(input.widths)
         
-        filter_peaks(
+        filter_loci(
             cur_chrom=wildcards.chrom,
             final_selection_points=optimized_result,
-            peak_widths=widths_result,
+            loci_widths=widths_result,
             data_per_length_scale=data_per_length_scale,
             final_events_df=final_events_df,
             n_iterations_optim=100_000,
@@ -452,51 +452,13 @@ rule filter_peaks_intermediate_1:
             filename=os.path.basename(output.filtered)
         )
         
-        logger.info(f'Filter peaks intermediate 1 complete for {wildcards.chrom}')
-
-
-rule peak_widths_intermediate_3:
-    input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        filtered=os.path.join(analysis_dir, 'filter_peaks_intermediate_1', '{chrom}.pickle')
-    output:
-        widths=os.path.join(analysis_dir, 'peak_widths_intermediate_3', '{chrom}.pickle')
-    log:
-        os.path.join(analysis_dir, 'logs', 'peak_widths_intermediate_3_{chrom}.log')
-    run:
-        import spice
-        from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import infer_peak_widths
-        
-        logger = get_logger(f'peak_widths_intermediate_3_{wildcards.chrom}', load_config=False)
-        logger.info(f'Running peak_widths_intermediate_3 for {wildcards.chrom}')
-        
-        data_per_length_scale = open_pickle(input.data_file)
-        filtered_result = open_pickle(input.filtered)
-        
-        data_loaders_dir = os.path.join(results_dir, 'data_loaders', name)
-        
-        infer_peak_widths(
-            cur_chrom=wildcards.chrom,
-            final_selection_points=filtered_result,
-            data_loaders_dir=data_loaders_dir,
-            data_per_length_scale=data_per_length_scale,
-            num_bootstrap_iterations=200,
-            max_pos_change=1e5,
-            max_deviation=0.00001,
-            num_optimization_iterations=1_000,
-            n_jobs=1,
-            output_dir=os.path.dirname(output.widths),
-            filename=os.path.basename(output.widths)
-        )
-        
-        logger.info(f'Peak widths intermediate 3 complete for {wildcards.chrom}')
+        logger.info(f'Filter loci intermediate 1 complete for {wildcards.chrom}')
 
 
 rule final_within_ci_filtering:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        filtered=os.path.join(analysis_dir, 'filter_peaks_intermediate_1', '{chrom}.pickle')
+        filtered=os.path.join(analysis_dir, 'filter_loci_intermediate_1', '{chrom}.pickle')
     output:
         final_filtered=os.path.join(analysis_dir, 'final_within_ci_filtering', '{chrom}.pickle')
     log:
@@ -516,7 +478,7 @@ rule final_within_ci_filtering:
             cur_chrom=wildcards.chrom,
             ranked_selection_points=filtered_result,
             data_per_length_scale=data_per_length_scale,
-            remove_empty_peaks=False,
+            remove_empty_loci=False,
             show_progress=False,
             log_progress=True,
             output_dir=os.path.dirname(output.final_filtered),
@@ -526,45 +488,45 @@ rule final_within_ci_filtering:
         logger.info(f'Final within CI filtering complete for {wildcards.chrom}')
 
 
-rule final_filter_peaks:
+rule final_filter_loci:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
         filtered=os.path.join(analysis_dir, 'final_within_ci_filtering', '{chrom}.pickle')
     output:
-        final_peaks=os.path.join(analysis_dir, 'final_filter_peaks', '{chrom}.pickle')
+        final_loci=os.path.join(analysis_dir, 'final_filter_loci', '{chrom}.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'final_filter_peaks_{chrom}.log')
+        os.path.join(analysis_dir, 'logs', 'final_filter_loci_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
-        from spice.tsg_og.detection import filter_peaks
+        from spice.tsg_og.detection import filter_loci
         
-        logger = get_logger(f'final_filter_peaks_{wildcards.chrom}', load_config=False)
-        logger.info(f'Running final_filter_peaks for {wildcards.chrom}')
+        logger = get_logger(f'final_filter_loci_{wildcards.chrom}', load_config=False)
+        logger.info(f'Running final_filter_loci for {wildcards.chrom}')
         
         data_per_length_scale = open_pickle(input.data_file)
         filtered_result = open_pickle(input.filtered)
         
-        filter_peaks(
+        filter_loci(
             cur_chrom=wildcards.chrom,
             final_selection_points=filtered_result,
-            peak_widths=None,
+            loci_widths=None,
             data_per_length_scale=data_per_length_scale,
             final_events_df=final_events_df,
             n_iterations_optim=100_000,
             show_progress_optim=False,
             max_deviation_optim=0.00001,
-            output_dir=os.path.dirname(output.final_peaks),
-            filename=os.path.basename(output.final_peaks)
+            output_dir=os.path.dirname(output.final_loci),
+            filename=os.path.basename(output.final_loci)
         )
         
-        logger.info(f'Final filter peaks complete for {wildcards.chrom}')
+        logger.info(f'Final filter loci complete for {wildcards.chrom}')
 
 
 rule final_limiting:
     input:
         data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        peaks=os.path.join(analysis_dir, 'final_filter_peaks', '{chrom}.pickle')
+        loci=os.path.join(analysis_dir, 'final_filter_loci', '{chrom}.pickle')
     output:
         final_limited=os.path.join(analysis_dir, 'final_limiting', '{chrom}.pickle')
     log:
@@ -578,11 +540,11 @@ rule final_limiting:
         logger.info(f'Running final_limiting for {wildcards.chrom}')
         
         data_per_length_scale = open_pickle(input.data_file)
-        peaks_result = open_pickle(input.peaks)
+        loci_result = open_pickle(input.loci)
         
         limiting_fitness(
             cur_chrom=wildcards.chrom,
-            raw_selection_points=peaks_result,
+            raw_selection_points=loci_result,
             data_per_length_scale=data_per_length_scale,
             max_iterations=10,
             allow_all_fitness_change=True,

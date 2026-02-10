@@ -188,74 +188,6 @@ def calc_event_distances(train_events, test_events, wgd_split=True, block_same_i
     return event_distances
 
 
-def load_knn_graph_train_data(dataset, wgd=None):
-    raise DeprecationWarning('load_knn_graph_train_data is deprecated, load the train data pickle file directly instead')
-    KNN_RESULTS_DIR = directories['knn_results_dir']
-    if dataset not in ['sv', 'timing', 'sv_and_timing', 'unamb', 'sv_and_unamb', 'timing_and_unamb', 'sv_and_timing_and_unamb']:
-        raise ValueError(f'unknown train_events: {dataset} (run create_knn_train_data to create it)')
-
-    if wgd is None or wgd == 'both':
-        wgd_phrase = ''
-    else:
-        assert wgd in ['wgd', 'nowgd']
-        wgd_phrase = f'_{wgd}'
-
-    train_events = open_pickle(os.path.join(KNN_RESULTS_DIR, f'train_events_{dataset}{wgd_phrase}.pickle'), fail_if_nonexisting=True)
-    return train_events
-
-
-@CALC_NEW()
-def create_knn_train_data_notebook(
-        train_name, events_df, sv_selected_chains, timing_selected_chains, sv_and_timing_selected_chains, unamb_selected_chains,
-        sample_filter=None):
-    logger.warning('kind of deprecated, use create_knn_train_data instead')
-    
-    train_selected_chains = {
-        'sv': set([f"{cur_id}:{selected_chains[0]}" for cur_id, selected_chains in sv_selected_chains.items() if len(selected_chains) == 1]),
-        'timing': set([f"{cur_id}:{selected_chains[0]}" for cur_id, selected_chains in timing_selected_chains.items() if len(selected_chains) == 1]),
-        'sv_and_timing': set([f"{cur_id}:{selected_chains[0]}" for cur_id, selected_chains in sv_and_timing_selected_chains.items() if len(selected_chains) == 1]),
-        'unamb': set(unamb_selected_chains),
-        'sv_and_unamb': set([f"{cur_id}:{selected_chains[0]}" for cur_id, selected_chains in sv_selected_chains.items() if len(selected_chains) == 1]) | set(unamb_selected_chains),
-        'timing_and_unamb': set([f"{cur_id}:{selected_chains[0]}" for cur_id, selected_chains in timing_selected_chains.items() if len(selected_chains) == 1]) | set(unamb_selected_chains),
-        'sv_and_timing_and_unamb': set([f"{cur_id}:{selected_chains[0]}" for cur_id, selected_chains in sv_and_timing_selected_chains.items() if len(selected_chains) == 1]) | set(unamb_selected_chains),
-        }
-
-    cur_train_selected_chains = train_selected_chains[train_name]
-    cur_train_events = events_df.query('chain in @cur_train_selected_chains')
-    if sample_filter is not None:
-        cur_train_events = cur_train_events.query('sample in @sample_filter')
-
-    log_debug(logger, f"creating knn train data for {train_name} ({'sample filter on with n = ' + str(len(sample_filter)) if sample_filter is not None else 'sample filter is off'}) ({len(cur_train_events)} events)")
-    cur_train_events = cur_train_events[['id', 'wgd', 'has_wgd', 'whole_chrom', 'whole_arm', 'telomere_bound', 'type', 'width', 'chrom_length']]
-
-    pre_post_wgds = ['nowgd', 'pre', 'post', 'all']
-
-    cur_train_events_dict = dict()
-    for cur_type, telomere_bound, pre_post_wgd in itertools.product(['gain', 'loss'], [True, False], pre_post_wgds):        
-        if pre_post_wgd == 'all':
-            cur_mask_train = np.logical_and.reduce([
-                (cur_train_events['type'] == cur_type),
-                (cur_train_events['telomere_bound'] == telomere_bound),
-                (~cur_train_events['whole_chrom']),
-                (~cur_train_events['whole_arm'])
-            ])
-        else:
-            cur_mask_train = np.logical_and.reduce([
-                (cur_train_events['type'] == cur_type),
-                (cur_train_events['telomere_bound'] == telomere_bound),
-                (cur_train_events['wgd'] == pre_post_wgd),
-                (~cur_train_events['whole_chrom']),
-                (~cur_train_events['whole_arm'])
-            ])
-        cur_train_events_dict[(cur_type, telomere_bound, pre_post_wgd)] = (
-            cur_train_events.loc[cur_mask_train, 'width'].values,
-            cur_train_events.loc[cur_mask_train, 'chrom_length'].values,
-            cur_train_events.loc[cur_mask_train, 'id'].values,
-            )
-
-    return cur_train_events_dict
-
-
 def solve_with_knn(full_paths, cur_chrom_segments, knn_train_data, k=250, wgd_split=True,
                    log10_distances=True, save_all_scores=None, ignore_empty_train=False,
                    single_width_bin=True, clip_k=True, perform_loh_checks=False):
@@ -274,11 +206,7 @@ def solve_with_knn(full_paths, cur_chrom_segments, knn_train_data, k=250, wgd_sp
         log_debug(logger, f'loading chrom_segments from {cur_chrom_segments}')
         cur_chrom_segments = pd.read_csv(cur_chrom_segments, sep='\t', index_col=['sample_id', 'chrom', 'allele']).query('id == @cur_id')
 
-    if isinstance(knn_train_data, str):
-        log_debug(logger, f'loading knn_train_data from {knn_train_data}')
-        knn_train_data = load_knn_graph_train_data(knn_train_data)
-    else:
-        assert isinstance(knn_train_data, dict), 'knn_train_data must be a string or a dictionary'
+    assert isinstance(knn_train_data, dict), 'knn_train_data must be a string or a dictionary'
 
     index, full_paths_data = zip(*[[k, v] for k, v in full_paths.events.items()])
 

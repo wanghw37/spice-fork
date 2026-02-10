@@ -137,15 +137,15 @@ def main_event_inference(args):
         name = config.get('name', None)
         if not name:
             raise ValueError("Config file must specify a 'name' field.")
-        results_dir = os.path.join(config['directories']['results_dir'], name)
-        print(f'Cleaning intermediate files at {results_dir}')
+        results_events_dir = os.path.join(config['directories']['results_dir'], name, 'events')
+        print(f'Cleaning intermediate files at {results_events_dir}')
         for wgd in ['nowgd', 'wgd']:
-            shutil.rmtree(os.path.join(results_dir, wgd), ignore_errors=True)
+            shutil.rmtree(os.path.join(results_events_dir, wgd), ignore_errors=True)
         print('Done cleaning.')
         return
     
     # Now do the expensive imports
-    from spice.data_loaders import load_final_events, resolve_data_file
+    from spice.data_loaders import load_final_events, resolve_copynumber_file
     from spice.utils import timeout, FunctionTimeoutError
     from spice.logging import configure_logging, get_logger
     from spice.cli_functions import save_fail_reports, step_aware_cleanup, _run_batch
@@ -179,9 +179,10 @@ def main_event_inference(args):
         return
     directories = config['directories']
     results_dir = os.path.join(directories['results_dir'], name)
+    results_events_dir = os.path.join(directories['results_dir'], name, 'events')
     log_dir = os.path.join(directories['log_dir'])
     plots_base_dir = os.path.join(directories['plot_dir'], name)
-    for cur_dir in [results_dir, log_dir, plots_base_dir]:
+    for cur_dir in [results_events_dir, log_dir, plots_base_dir]:
         if not os.path.exists(cur_dir):
             logger.info(f"Creating directory {cur_dir}")
             os.makedirs(cur_dir)
@@ -189,7 +190,7 @@ def main_event_inference(args):
     logger.info('Running SPICE: Selection Patterns In somatic Copy-number Events')
     logger.info(f'Running event inference for project name {name} with config file {args.config_path}')
 
-    logger.info(f'Results will be stored in {results_dir}')
+    logger.info(f'Results will be stored in {results_events_dir}')
     logger.info(f'Running the following steps: {", ".join(which)}')
 
     selected_ids = args.ids.split(',') if args.ids is not None else None
@@ -226,7 +227,7 @@ def main_event_inference(args):
         if config['params'].get('skip_existing', False):
             raise ValueError("If skip_existing=True in config, have to use --keep-old to avoid deleting existing files.")
         logger.info('Cleaning old intermediate files')
-        step_aware_cleanup(results_dir, which)
+        step_aware_cleanup(results_events_dir, which)
 
     # Run preprocessing first unless skipped
     if 'preprocessing' in which and not args.skip_preprocessing:
@@ -241,7 +242,7 @@ def main_event_inference(args):
     elif 'preprocessing' in which and args.skip_preprocessing:
         logger.info('Skipping preprocessing due to --skip-preprocessing')
 
-    chrom_segments_file = resolve_data_file()
+    chrom_segments_file = resolve_copynumber_file()
 
     if 'split' in which:
         logger.info('Starting splitting of the input TSV')
@@ -256,13 +257,13 @@ def main_event_inference(args):
         for wgd_status in ['nowgd', 'wgd']:
             is_wgd = (wgd_status == 'wgd')
             cur_ids = [x.replace('.pickle', '')
-                    for x in os.listdir(os.path.join(str(results_dir), wgd_status, 'chrom_data_full'))]
+                    for x in os.listdir(os.path.join(str(results_events_dir), wgd_status, 'chrom_data_full'))]
             if selected_ids is not None:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
 
             @timeout(config['params']['time_limit_all_solutions'], mode="auto")
             def run_full_paths(cur_id):
-                output_file = os.path.join(results_dir, wgd_status, 'full_paths_multiple_solutions', f'{cur_id}.pickle')
+                output_file = os.path.join(results_events_dir, wgd_status, 'full_paths_multiple_solutions', f'{cur_id}.pickle')
                 if skip_existing and os.path.exists(output_file):
                     logger.info(f"Skipping all_solutions for {cur_id} ({wgd_status}) as {output_file} exists.")
                     return {'status': 'skipped', 'cur_id': cur_id, 'step': 'all_solutions'}
@@ -271,11 +272,12 @@ def main_event_inference(args):
                     is_wgd=(wgd_status == 'wgd'),
                     chrom_segments_file=chrom_segments_file,
                     sv_data_file=config['params'].get('sv_data_file', None),
-                    chrom_file=os.path.join(results_dir, wgd_status, 'chrom_data_full', f'{cur_id}.pickle'),
+                    chrom_file=os.path.join(results_events_dir, wgd_status, 'chrom_data_full', f'{cur_id}.pickle'),
                     sv_matching_threshold=config['params']['sv_matching_threshold'],
                     use_cache=config['params']['use_cache'],
                     total_cn=config['params'].get('total_cn', False),
                     all_loh_solutions=config['params']['all_loh_solutions'],
+                    output_file=output_file,
                     save_output=True,
                     skip_loh_checks=True,
                 )
@@ -288,19 +290,19 @@ def main_event_inference(args):
     if 'disambiguate' in which:
         logger.info('Starting KNN disambiguation of solutions with multiple paths')
         skip_existing = config['params'].get('skip_existing', False)
-        full_paths_multiple_solutions_dirs=[os.path.join(results_dir, 'nowgd', 'full_paths_multiple_solutions'),
-                                        os.path.join(results_dir, 'wgd', 'full_paths_multiple_solutions')]
+        full_paths_multiple_solutions_dirs=[os.path.join(results_events_dir, 'nowgd', 'full_paths_multiple_solutions'),
+                                        os.path.join(results_events_dir, 'wgd', 'full_paths_multiple_solutions')]
         for wgd_status in ['nowgd', 'wgd']:
-            if not os.path.exists(os.path.join(str(results_dir), wgd_status, 'full_paths_multiple_solutions')):
-                logger.warning(f"Directory {os.path.join(str(results_dir), wgd_status, 'full_paths_multiple_solutions')} does not exist, skipping disambiguation for {wgd_status}")
+            if not os.path.exists(os.path.join(str(results_events_dir), wgd_status, 'full_paths_multiple_solutions')):
+                logger.warning(f"Directory {os.path.join(str(results_events_dir), wgd_status, 'full_paths_multiple_solutions')} does not exist, skipping disambiguation for {wgd_status}")
                 continue
             is_wgd = (wgd_status == 'wgd')
             cur_ids = [x.replace('.pickle', '')
-                    for x in os.listdir(os.path.join(str(results_dir), wgd_status, 'full_paths_multiple_solutions'))]
+                    for x in os.listdir(os.path.join(str(results_events_dir), wgd_status, 'full_paths_multiple_solutions'))]
             if selected_ids is not None:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
             def run_knn(cur_id):
-                output_file = os.path.join(results_dir, wgd_status, 'knn_solved_chroms', f'{cur_id}.pickle')
+                output_file = os.path.join(results_events_dir, wgd_status, 'knn_solved_chroms', f'{cur_id}.pickle')
                 if skip_existing and os.path.exists(output_file):
                     logger.info(f"Skipping disambiguate for {cur_id} ({wgd_status}) as {output_file} exists.")
                     return {'status': 'skipped', 'cur_id': cur_id, 'step': 'disambiguate'}
@@ -326,17 +328,17 @@ def main_event_inference(args):
         logger.info('Starting MCMC inference for large chromosomes with many events')
         skip_existing = config['params'].get('skip_existing', False)
         for wgd_status in ['nowgd', 'wgd']:
-            if not os.path.exists(os.path.join(str(results_dir), wgd_status, 'chrom_data_large')):
-                logger.warning(f"Directory {os.path.join(str(results_dir), wgd_status, 'chrom_data_large')} does not exist, skipping large chromosomes for {wgd_status}")
+            if not os.path.exists(os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large')):
+                logger.warning(f"Directory {os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large')} does not exist, skipping large chromosomes for {wgd_status}")
                 continue
             is_wgd = (wgd_status == 'wgd')
             cur_ids = [x.replace('.pickle', '')
-                    for x in os.listdir(os.path.join(str(results_dir), wgd_status, 'chrom_data_large'))]
+                    for x in os.listdir(os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large'))]
             if selected_ids is not None:
                 cur_ids = [x for x in cur_ids if x in selected_ids]
 
             def run_mcmc(cur_id):
-                output_file = os.path.join(results_dir, wgd_status, 'mcmc_solved_chroms_large', f'{cur_id}.pickle')
+                output_file = os.path.join(results_events_dir, wgd_status, 'mcmc_solved_chroms_large', f'{cur_id}.pickle')
                 if skip_existing and os.path.exists(output_file):
                     logger.info(f"Skipping large_chroms for {cur_id} ({wgd_status}) as {output_file} exists.")
                     return {'status': 'skipped', 'cur_id': cur_id, 'step': 'large_chroms'}
@@ -344,7 +346,7 @@ def main_event_inference(args):
                 def _solve_with_mcmc_wrapper(cur_id, skip_loh_check):
                     return solve_with_mcmc_wrapper(
                         output_file=output_file,
-                        chrom_file=os.path.join(results_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
+                        chrom_file=os.path.join(results_events_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
                         is_wgd=is_wgd,
                         chrom_segments_file=chrom_segments_file,
                         sv_data_file=config['params'].get('sv_data_file', None),
@@ -373,10 +375,10 @@ def main_event_inference(args):
     if 'combine' in which:
         logger.info('Starting combination of final events from all solving methods')
         solved_dirs = (
-            [os.path.join(results_dir, wgd, 'knn_solved_chroms') for wgd in ['nowgd', 'wgd']] +
-            [os.path.join(results_dir, wgd, 'full_paths_single_solution') for wgd in ['nowgd', 'wgd']] +
-            [os.path.join(results_dir, wgd, 'mcmc_solved_chroms_full') for wgd in ['nowgd', 'wgd']] +
-            [os.path.join(results_dir, wgd, 'mcmc_solved_chroms_large') for wgd in ['nowgd', 'wgd']]
+            [os.path.join(results_events_dir, wgd, 'knn_solved_chroms') for wgd in ['nowgd', 'wgd']] +
+            [os.path.join(results_events_dir, wgd, 'full_paths_single_solution') for wgd in ['nowgd', 'wgd']] +
+            [os.path.join(results_events_dir, wgd, 'mcmc_solved_chroms_full') for wgd in ['nowgd', 'wgd']] +
+            [os.path.join(results_events_dir, wgd, 'mcmc_solved_chroms_large') for wgd in ['nowgd', 'wgd']]
         )
         combine_final_events(
             solved_dirs=solved_dirs,
@@ -389,7 +391,7 @@ def main_event_inference(args):
         )
 
     save_fail_reports(failed_reports, logger=logger)
-    logger.info(f'Done. Results are in {results_dir}')
+    logger.info(f'Done. Results are in {results_events_dir}')
 
 
 def main_plotting(args):
@@ -399,7 +401,7 @@ def main_plotting(args):
     # Load configuration
     spice.load_config(args.config_path)
     from spice import config
-    from spice.data_loaders import load_final_events, resolve_data_file
+    from spice.data_loaders import load_final_events, resolve_copynumber_file
     from spice.logging import configure_logging, get_logger
     from spice import plot as spice_plot
     from matplotlib import pyplot as plt
@@ -426,15 +428,13 @@ def main_plotting(args):
     logger.info('Running SPICE: Plotting Mode')
     logger.info(f'Plotting for project name {name} with config file {args.config_path}')
 
-    # Validate plot target - this is now enforced by mutually_exclusive_group in argparse
-    # Load required inputs
-    chrom_segments_file = resolve_data_file()
-    chrom_segments = pd.read_csv(
-        chrom_segments_file, sep='\t', index_col=['sample_id', 'chrom', 'allele']).sort_index()
-    final_events_df = load_final_events()
-
-    if args.plot_sample is not None:
-        cur_sample = args.plot_sample
+    # Load required inputs based on mode
+    if args.plot_events_per_sample is not None:
+        chrom_segments_file = resolve_copynumber_file()
+        chrom_segments = pd.read_csv(
+            chrom_segments_file, sep='\t', index_col=['sample_id', 'chrom', 'allele']).sort_index()
+        final_events_df = load_final_events()
+        cur_sample = args.plot_events_per_sample
         logger.info(f'Plotting inferred events for sample: {cur_sample}')
         fig, axs = spice_plot.plot_inferred_events_per_sample(
             cur_sample,
@@ -445,8 +445,12 @@ def main_plotting(args):
         out_path = os.path.join(plots_base_dir, f'{cur_sample}_events{"_unit_size" if args.plot_unit_size else ""}.png')
         fig.savefig(out_path, bbox_inches='tight')
         logger.info(f'Saved plot to {out_path}')
-    else:
-        cur_id = args.plot_id
+    elif args.plot_events_per_id is not None:
+        chrom_segments_file = resolve_copynumber_file()
+        chrom_segments = pd.read_csv(
+            chrom_segments_file, sep='\t', index_col=['sample_id', 'chrom', 'allele']).sort_index()
+        final_events_df = load_final_events()
+        cur_id = args.plot_events_per_id
         logger.info(f'Plotting inferred events for id: {cur_id}')
         # Derive WIDTH_FULL from matplotlib defaults if not provided
         WIDTH_FULL = plt.rcParams.get('figure.figsize', (15, 5))[0]
@@ -464,6 +468,64 @@ def main_plotting(args):
         out_path = os.path.join(plots_base_dir, f'{safe_id}_events.png')
         fig.savefig(out_path, bbox_inches='tight')
         logger.info(f'Saved plot to {out_path}')
+    elif args.plot_loci_on_chrom is not None:
+        from spice.utils import open_pickle
+        from spice.tsg_og.detection import convolution_simulation_per_ls
+        
+        cur_chrom = args.plot_loci_on_chrom
+        detection_assignment = args.loci_mode
+        output_dir = os.path.join(config['directories']['results_dir'], name, 'loci_of_selection')
+        
+        logger.info(f'Plotting all loci on {cur_chrom} ({detection_assignment} mode)')
+        
+        data_per_ls = open_pickle(os.path.join(output_dir, 'data_per_length_scale', f'{cur_chrom}.pickle'))
+        selection_points = open_pickle(os.path.join(output_dir, detection_assignment, cur_chrom, 'final_selection_points.pickle'))
+        
+        simulated_conv = convolution_simulation_per_ls(
+            cur_chrom, data_per_ls, selection_points)
+        fig, axs = plt.subplots(figsize=(25, 15), nrows=4, ncols=1, sharex=True)
+        spice_plot.plot_tsg_og_results(
+            cur_chrom, data_per_ls, simulated_conv=simulated_conv,
+            plot_signal_bounds=True, fig=fig,
+            final_selection_points=selection_points)
+        
+        out_path = os.path.join(plots_base_dir, f'{cur_chrom}_loci_{detection_assignment}.png')
+        fig.savefig(out_path, bbox_inches='tight')
+        logger.info(f'Saved plot to {out_path}')
+    elif args.plot_single_locus is not None:
+        from spice.utils import open_pickle
+        from spice.tsg_og.detection import convolution_simulation_per_ls
+        
+        detection_assignment = args.loci_mode
+        final_loci_df = pd.read_csv(
+            os.path.join(config['directories']['results_dir'], name, f'final_loci_{detection_assignment}.tsv'),
+            sep='\t', index_col=0)
+        
+        loci_index = args.plot_single_locus
+        if loci_index not in final_loci_df.index:
+            raise ValueError(f'Locus index {loci_index} not found in final loci dataframe for {detection_assignment} mode. Available indices: {final_loci_df.index.tolist()}')
+        cur_locus = final_loci_df.loc[loci_index]
+        cur_chrom = cur_locus['chrom']
+        output_dir = os.path.join(config['directories']['results_dir'], name, 'loci_of_selection')
+        
+        logger.info(f'Plotting locus index {loci_index} on {cur_chrom} ({detection_assignment} mode)')
+        
+        data_per_ls = open_pickle(os.path.join(output_dir, 'data_per_length_scale', f'{cur_chrom}.pickle'))
+        selection_points = open_pickle(os.path.join(output_dir, detection_assignment, cur_chrom, 'final_selection_points.pickle'))
+        simulated_conv = convolution_simulation_per_ls(
+            cur_chrom, data_per_ls, selection_points)
+        
+        cluster_i = final_loci_df.loc[loci_index, 'rank_on_chrom']
+        fig, axs = plt.subplots(figsize=(40, 13), nrows=1, ncols=4)
+        spice_plot.plot_tsg_og_results(
+            cur_chrom, data_per_ls, simulated_conv=simulated_conv,
+            cluster_i=cluster_i, relative_window_size=3,
+            orientation='v', fig=fig, xlim=(1e7, 5e7),
+            final_selection_points=selection_points)
+        
+        out_path = os.path.join(plots_base_dir, f'{cur_chrom}_locus_{loci_index}_{detection_assignment}.png')
+        fig.savefig(out_path, bbox_inches='tight')
+        logger.info(f'Saved plot to {out_path}')
 
     logger.info('Done plotting.')
 
@@ -477,7 +539,10 @@ def main_loci_detection(args):
 
     if 'name' not in config or not config['name']:
         raise ValueError("Config file must specify a 'name' field.")
-    
+
+    loci_results_dir = os.path.join(config['directories']['results_dir'], config['name'], 'loci_of_selection')
+    os.makedirs(loci_results_dir, exist_ok=True)
+
     # Create logger
     log_level = 'DEBUG' if args.debug else config['params'].get('logging_level', 'INFO')
     configure_logging(
@@ -519,8 +584,180 @@ def main_loci_detection(args):
         subprocess.run(cmd, check=True, env=env)
         return
     
-    logger.warning('Non-Snakemake mode for loci detection is not yet implemented.')
-    logger.info('Please use --snakemake flag to run loci detection.')
+    # Non-Snakemake mode: Use the loci detection pipeline
+    from spice.main_loci_functions import run_loci_detection_per_chrom, process_final_events_for_loci_routines
+    from spice.data_loaders import load_final_events
+    
+    # Get loci detection parameters from config
+    loci_params = config['loci_detection']
+    final_events_df = load_final_events()
+
+    logger.info('Processing final events for loci detection')
+    processed_events = process_final_events_for_loci_routines(
+        final_events_df=final_events_df,
+        remove_plateaus=loci_params.get('remove_plateaus', True),
+        remove_chrY=loci_params.get('remove_chrY', True),
+        drop_duplicates=loci_params.get('drop_duplicates', True),
+        use_observed_centromeres=loci_params.get('use_observed_centromeres', True),
+    )
+    
+    chromosomes = processed_events['chrom'].unique()
+    assert set(chromosomes).issubset(set(['chr' + str(x) for x in range(1, 23)] + ['chrX', 'chrY'])), (
+        f"Unexpected chromosomes in final events: {set(chromosomes) - set(['chr' + str(x) for x in range(1, 23)] + ['chrX', 'chrY'])}"
+    )
+    logger.info(f'Found {len(chromosomes)} unique chromosomes in final events: {chromosomes}')
+    
+    # Check sample count and warn if too low
+    n_samples = processed_events['sample'].nunique()
+    if n_samples < 1000:
+        logger.warning('='*80)
+        logger.warning('!!!  WARNING: LOW SAMPLE COUNT DETECTED !!!')
+        logger.warning(f'Only {n_samples} samples found in processed events.')
+        logger.warning('We recommend at least 1000 samples for reliable results.')
+        logger.warning('Results may be unreliable with fewer samples.')
+        logger.warning('='*80)
+
+    if 'loci_steps' in args and args.loci_steps is not None:
+        steps_to_run = args.loci_steps
+    else:
+        steps_to_run = loci_params['loci_steps']
+    if hasattr(steps_to_run, '__iter__') and len(steps_to_run) == 1:
+        steps_to_run = steps_to_run[0]
+    logger.info(f'Running the following loci detection steps: {steps_to_run}')
+
+    for chrom in chromosomes:
+        if steps_to_run == "combine":
+            continue
+        logger.info(f'Processing {chrom}...')
+        run_loci_detection_per_chrom(
+            final_events_df=processed_events,
+            cur_chrom=chrom,
+            which=steps_to_run,
+            overwrite=args.overwrite,
+            overwrite_preprocessing=(loci_params['overwrite_preprocessing'] and args.overwrite),
+            name=config['name'],
+            N_loci=loci_params['N_loci'],
+            loci_results_dir=loci_results_dir,
+            skip_up_down=loci_params['skip_up_down'],
+            N_bootstrap=loci_params['N_bootstrap'],
+            N_kernel=loci_params['N_kernel'],
+            use_original_rank=loci_params['use_original_rank'],
+            detection_N_iterations_base=loci_params['detection_N_iterations_base'],
+            detection_max_N_iterations=loci_params['detection_max_N_iterations'],
+            detection_final_N_iterations=loci_params['detection_final_N_iterations'],
+            detection_blocked_distance_th=loci_params['detection_blocked_distance_th'],
+            ranking_N_iterations=loci_params['ranking_N_iterations'],
+            flipping_N_iterations=loci_params['flipping_N_iterations'],
+            flipping_N_iterations_single=loci_params['flipping_N_iterations_single'],
+            limiting_N_iterations_optim=loci_params['limiting_N_iterations_optim'],
+            optimizing_N_iterations_optimization=loci_params['optimizing_N_iterations_optimization'],
+            infer_widths_N_iterations=loci_params['infer_widths_N_iterations'],
+            merge_N_iterations_optim=loci_params['merge_N_iterations_optim'],
+            filter_N_iterations_optim=loci_params['filter_N_iterations_optim'],
+            final_limiting_N_iterations_optim=loci_params['final_limiting_N_iterations_optim'],
+            N_bootstrap_for_widths=loci_params['N_bootstrap_for_widths'],
+            within_ci_N_iterations=loci_params['within_ci_N_iterations'],
+            th_locus_prominence=loci_params['th_locus_prominence'],
+        )
+
+    if not (steps_to_run in ['fast', 'default', 'combine'] or 'combine' in steps_to_run or '+' in steps_to_run):
+        logger.info(steps_to_run)
+        logger.warning("Loci detection steps do not include 'combine'. Final combination of loci across chromosomes will be skipped.")
+        return
+
+    # Combine results from all chromosomes
+    logger.info('Combining all loci detection results across chromosomes')
+    from spice.main_loci_functions import combine_loci
+    final_loci_df = combine_loci(
+        loci_results_dir=loci_results_dir,
+        processed_events=processed_events,
+        calculate_p_value=loci_params['calculate_p_value'],
+        p_values_N_random=loci_params['p_values_N_random'],
+        p_values_iterations=loci_params['p_values_iterations'],
+        post_p_value_N_iterations=loci_params['post_p_value_N_iterations'],
+        p_value_threshold=loci_params['p_value_threshold'],
+        overwrite=args.overwrite,
+        mode='detection'
+    )
+
+    # Save final combined loci results
+    final_loci_output_path = os.path.join(config['directories']['results_dir'], config['name'], 'final_loci_detection.tsv')
+    final_loci_df.to_csv(final_loci_output_path, sep='\t', index=True)
+    logger.info(f'Saved final combined loci detection results to {final_loci_output_path}')
+
+    logger.info('Loci detection pipeline completed.')
+
+
+def main_loci_assignment(args):
+    """Run loci assignment mode (assign fitness to predefined loci)."""
+    # Load configuration
+    spice.load_config(args.config_path)
+    from spice import config
+    from spice.logging import configure_logging, get_logger
+
+    if 'name' not in config or not config['name']:
+        raise ValueError("Config file must specify a 'name' field.")
+
+    # Create logger
+    log_level = 'DEBUG' if args.debug else config['params'].get('logging_level', 'INFO')
+    configure_logging(
+        log_mode=args.log,
+        log_dir=config['directories']['log_dir'],
+        config_name=config['name'],
+        level=log_level,
+    )
+    logger = get_logger('SPICE', spice_prefix=False)
+
+    logger.info('Running SPICE: Loci Assignment Mode')
+    logger.info(f'Project name: {config["name"]}')
+    
+    # Run loci assignment pipeline
+    from spice.main_loci_functions import loci_assignment, process_final_events_for_loci_routines
+    from spice.data_loaders import load_final_events
+    
+    # Get loci assignment parameters from config
+    loci_params = config['loci_detection']
+    final_events_df = load_final_events()
+
+    logger.info('Processing final events for loci detection')
+    processed_events = process_final_events_for_loci_routines(
+        final_events_df=final_events_df,
+        remove_plateaus=loci_params.get('remove_plateaus', True),
+        remove_chrY=loci_params.get('remove_chrY', True),
+        drop_duplicates=loci_params.get('drop_duplicates', True),
+        use_observed_centromeres=loci_params.get('use_observed_centromeres', True),
+    )
+    
+    # Check sample count and warn if too low
+    n_samples = processed_events['sample'].nunique()
+    if n_samples < 500:
+        logger.warning('='*80)
+        logger.warning('!!!  WARNING: LOW SAMPLE COUNT DETECTED !!!')
+        logger.warning(f'Only {n_samples} samples found in processed events.')
+        logger.warning('We recommend at least 500 samples for reliable results.')
+        logger.warning('Results may be unreliable with fewer samples.')
+        logger.warning('='*80)
+
+    final_loci_df = loci_assignment(
+        name=config['name'],
+        processed_events=processed_events,
+        N_bootstrap=loci_params['N_bootstrap'],
+        N_kernel=loci_params['N_kernel'],
+        within_ci_N_iterations=loci_params['loci_assignment_within_ci_N_iterations'],
+        N_iterations_optim=loci_params['loci_assignment_N_iterations'],
+        p_values_N_random=loci_params['p_values_N_random'],
+        p_values_iterations=loci_params['p_values_iterations'],
+        post_p_value_N_iterations=loci_params['post_p_value_N_iterations'],
+        overwrite=args.overwrite,
+        overwrite_preprocessing=(loci_params['overwrite_preprocessing'] and args.overwrite),
+    )
+
+    # Save final combined loci results
+    final_loci_output_path = os.path.join(config['directories']['results_dir'], config['name'], 'final_loci_assignment.tsv')
+    final_loci_df.to_csv(final_loci_output_path, sep='\t', index=True)
+    logger.info(f'Saved final combined loci assignment results to {final_loci_output_path}')
+
+    logger.info('Loci assignment pipeline completed.')
 
 
 def main():
@@ -555,8 +792,11 @@ Examples:
   spice plotting --config <path/to/config> --plot-sample "sample_1"
   spice plotting --config <path/to/config> --plot-id "sample_1:chr1:cn_a"
   
-  # Loci detection (not yet implemented)
+  # Loci detection (de-novo)
   spice loci_detection --config <path/to/config>
+  
+  # Loci assignment (fitness assignment to predefined loci)
+  spice loci_assignment --config <path/to/config>
     """
     
     # Create subparsers for different modes
@@ -681,28 +921,48 @@ Examples:
     parser_plot = subparsers.add_parser(
         'plotting',
         parents=[common_parser],
-        help='Plot inferred events',
+        help='Plot inferred events and loci',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Generate visualizations of inferred copy-number events'
+        description='Generate visualizations of inferred copy-number events and selection loci'
     )
     plot_group = parser_plot.add_mutually_exclusive_group(required=True)
     plot_group.add_argument(
-        '--plot-sample',
-        dest='plot_sample',
+        '--plot-events-per-sample',
+        dest='plot_events_per_sample',
         type=str,
-        help='Sample ID to plot'
+        help='Sample ID to plot events for'
     )
     plot_group.add_argument(
-        '--plot-id',
-        dest='plot_id',
+        '--plot-events-per-id',
+        dest='plot_events_per_id',
         type=str,
-        help='Chromosome allele ID to plot (format: sample:chr:cn_a|cn_b)'
+        help='Chromosome allele ID to plot events for (format: sample:chr:cn_a|cn_b)'
+    )
+    plot_group.add_argument(
+        '--plot-loci-on-chrom',
+        dest='plot_loci_on_chrom',
+        type=str,
+        help='Chromosome to plot all loci for (e.g., chr1)'
+    )
+    plot_group.add_argument(
+        '--plot-single-locus',
+        dest='plot_single_locus',
+        type=int,
+        help='Locus index to plot (from final_loci_*.tsv)'
     )
     parser_plot.add_argument(
         '--plot-unit-size',
         dest='plot_unit_size',
         action='store_true',
-        help='Use unit_size for plotting events'
+        help='Use unit_size for plotting events (only for --plot-events-per-sample)'
+    )
+
+    parser_plot.add_argument(
+        '--loci-mode',
+        type=str,
+        choices=['detection', 'assignment'],
+        default='detection',
+        help='Loci mode: detection or assignment (for loci plotting modes)'
     )
     parser_plot.set_defaults(func=main_plotting)
     
@@ -713,6 +973,17 @@ Examples:
         help='Detect recurrent copy-number loci (de-novo mode)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description='Identify recurrent copy-number loci across chromosomes using de-novo detection'
+    )
+    parser_loci.add_argument(
+        '--loci-steps',
+        nargs='+',
+        default=None,
+        help='Steps to run. If not present will use "loci_steps" from config. Use "fast" for accelerated mode, "all" or "default" for full pipeline, or a trailing + (e.g., split+) to run that step and all subsequent steps.'
+    )
+    parser_loci.add_argument(
+        '--overwrite',
+        action='store_true',
+        help='Run new and overwrite existing data'
     )
     parser_loci.add_argument(
         '--snakemake',
@@ -738,6 +1009,21 @@ Examples:
         help='Number of cores for local Snakemake execution (-c, default: 1)'
     )
     parser_loci.set_defaults(func=main_loci_detection)
+    
+    # ===== LOCI ASSIGNMENT SUBPARSER =====
+    parser_assign = subparsers.add_parser(
+        'loci_assignment',
+        parents=[common_parser],
+        help='Assign fitness to predefined loci',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Assign fitness values to predefined loci positions'
+    )
+    parser_assign.add_argument(
+        '--overwrite',
+        action='store_true',
+        help='Run new and overwrite existing data'
+    )
+    parser_assign.set_defaults(func=main_loci_assignment)
     
     # Parse arguments and call the appropriate function
     args = parser.parse_args()

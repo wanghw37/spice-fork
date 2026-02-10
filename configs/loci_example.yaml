@@ -1,0 +1,33 @@
+name: 'loci_example'
+input_files:
+  final_events: 'data/pcawg_final_events_chr1_chr2.tsv'
+
+loci_detection:
+  loci_steps: 'fast' # Steps to run: 'default', 'fast', single step, or space-separated steps
+  N_loci: 1
+  N_bootstrap: 10
+  N_kernel: 1000
+  detection_blocked_distance_th: 5000000
+  detection_N_iterations_base: 30
+  detection_max_N_iterations: 200
+  detection_final_N_iterations: 250
+  ranking_N_iterations: 5
+  flipping_N_iterations: 110
+  flipping_N_iterations_single: 10
+  limiting_N_iterations_optim: 100
+  optimizing_N_iterations_optimization: 110
+  infer_widths_N_iterations: 10
+  merge_N_iterations_optim: 100
+  filter_N_iterations_optim: 100
+  final_limiting_N_iterations_optim: 100
+  within_ci_N_iterations: 100
+  N_bootstrap_for_widths: 5
+  p_values_N_random: 100
+  p_values_iterations: 100
+  post_p_value_N_iterations: 250
+  loci_assignment_N_iterations: 250
+  loci_assignment_within_ci_N_iterations: 100
+  calculate_p_value: True
+
+
+note: 'Example configuration for loci inferral'

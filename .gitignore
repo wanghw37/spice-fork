@@ -27,5 +27,5 @@ results/*
 plots/*
 
 # Specific files
-notebooks/debug.ipynb
+notebooks/debug*.ipynb
 OLD_Snakefile

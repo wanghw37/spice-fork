@@ -20,7 +20,7 @@ except ModuleNotFoundError as e:
     raise ModuleNotFoundError('You need to install CNSistent using "pip install CNSistent" to use the pre-processing')
 
 from spice import config, directories, data_loaders
-from spice.utils import get_logger, log_debug
+from spice.logging import log_debug, get_logger
 from spice.preprocessing.preprocessing import (
     fill_gaps_cnsistent_wrapper, merge_neighbours_mod, infer_wgd_status,
     fill_telomere_nans, get_breaks_mod, main_aggregate_quiet
@@ -58,7 +58,7 @@ def main(
 
     chrom_lens_df = data_loaders.load_chrom_lengths()
 
-    data = data_loaders.load_cn_tsv(config['input_files']['copynumber'])[['sample_id', 'chrom', 'start', 'end', 'cn_a', 'cn_b']]
+    data = data_loaders.load_raw_copy_number_data(config['input_files']['copynumber'])[['sample_id', 'chrom', 'start', 'end', 'cn_a', 'cn_b']]
 
     # assert data.index.get_level_values('sample_id').nunique() == len(drews_whitelist), (data.index.get_level_values('sample_id').nunique(), len(drews_whitelist))
     data.loc[data['start'] == 1, 'start'] = 0 # change such that start begins at 0

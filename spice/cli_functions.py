@@ -3,20 +3,23 @@ import os
 import pandas as pd
 from joblib import Parallel, delayed
 
-from spice.utils import log_debug
+from spice.logging import log_debug
 
 
 def save_fail_reports(failed_reports, results_dir=None, cur_step=None, logger=None):
     if results_dir is None:
         from spice import directories, config
         results_dir = directories['results_dir']
+    fail_path = os.path.join(results_dir, config['name'], 'events', f'failed_reports{("_" + cur_step) if cur_step is not None else ""}.tsv')
     if len(failed_reports) == 0:
-        return pd.DataFrame(columns=['id', 'step', 'error', 'status'])
+        empty_fail_report = pd.DataFrame(columns=['id', 'step', 'error', 'status'])
+        if cur_step is None: # top-level
+            empty_fail_report.to_csv(fail_path, sep='\t', index=False)
+        return empty_fail_report
     df_fail = pd.DataFrame(failed_reports)
     for col in ['id', 'step', 'error', 'status']:
         if col not in df_fail.columns:
             df_fail[col] = None
-    fail_path = os.path.join(results_dir, config['name'], f'failed_reports{("_" + cur_step) if cur_step is not None else ""}.tsv')
     df_fail[['id', 'step', 'error', 'status']].to_csv(fail_path, sep='\t', index=False)
     if logger is not None:
         logger.info(f"A total of {len(df_fail)} tasks failed during execution. "
@@ -50,31 +53,31 @@ def step_aware_cleanup(results_dir, requested_steps=None):
             ('__data__', f'{name}_processed_split.tsv'),
         ],
         'split': [
-            ('nowgd', 'chrom_data_full'),
-            ('nowgd', 'chrom_data_large'),
-            ('wgd', 'chrom_data_full'),
-            ('wgd', 'chrom_data_large'),
+            ('events/nowgd', 'chrom_data_full'),
+            ('events/nowgd', 'chrom_data_large'),
+            ('events/wgd', 'chrom_data_full'),
+            ('events/wgd', 'chrom_data_large'),
             ('', 'WGD_status_major_cn.png'),
             ('', 'WGD_status_ploidy_loh.png'),
         ],
         'all_solutions': [
-            ('nowgd', 'full_paths_multiple_solutions'),
-            ('nowgd', 'full_paths_single_solution'),
-            ('wgd', 'full_paths_multiple_solutions'),
-            ('wgd', 'full_paths_single_solution'),
+            ('events/nowgd', 'full_paths_multiple_solutions'),
+            ('events/nowgd', 'full_paths_single_solution'),
+            ('events/wgd', 'full_paths_multiple_solutions'),
+            ('events/wgd', 'full_paths_single_solution'),
         ],
         'disambiguate': [
-            ('nowgd', 'knn_solved_chroms'),
-            ('wgd', 'knn_solved_chroms'),
+            ('events/nowgd', 'knn_solved_chroms'),
+            ('events/wgd', 'knn_solved_chroms'),
         ],
         'large_chroms': [
-            ('nowgd', 'mcmc_solved_chroms_large'),
-            ('wgd', 'mcmc_solved_chroms_large'),
+            ('events/nowgd', 'mcmc_solved_chroms_large'),
+            ('events/wgd', 'mcmc_solved_chroms_large'),
         ],
         'combine': [
             ('', 'final_events.tsv'),
-            ('', 'summary.tsv'),
-            ('', 'failed_reports.tsv'),
+            ('events', 'events_summary.tsv'),
+            ('events', 'failed_reports.tsv'),
         ],
     }
 

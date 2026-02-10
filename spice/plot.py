@@ -15,13 +15,10 @@ from spice.utils import chrom_id_from_id, get_logger, get_diffs_from_events_df, 
 from spice.event_inference.events_from_graph import raw_events_from_FullPaths
 from spice.event_inference.mcmc_for_large_chroms import _get_events_from_diff
 from spice.event_inference.data_structures import FullPaths
-# from spice.features import DEFAULT_SEGMENT_SIZE_DICT, LS_I_DICT, LS_I_DICT_REV
+from spice.length_scales import DEFAULT_SEGMENT_SIZE_DICT, LS_I_DICT, LS_I_DICT_REV
 # from spice.tsg_og.event_rate_per_loci import calc_event_rate_per_loci
 # from spice.tsg_og.simulation import convolution_simulation
 
-DEFAULT_SEGMENT_SIZE_DICT = None
-LS_I_DICT = None
-LS_I_DICT_REV = None
 
 logger = get_logger('plotting')
 
@@ -1364,15 +1361,15 @@ def plot_tsg_og_results(
         restrict_selection_points_to_nonzero=True,
         plot_signal_bounds=True,
         plot_signal_bounds_around_conv=False,
-        peak_widths=None,
+        loci_widths=None,
         plot_genes=False,
         genes_lw=3,
         lw=2,
         genes_markersize=8,
-        cur_biscut_peaks=None,
-        cur_gistic_peaks=None,
-        cur_cosmic_peaks=None,
-        cur_davoli_peaks=None,
+        cur_biscut_loci=None,
+        cur_gistic_loci=None,
+        cur_cosmic_loci=None,
+        cur_davoli_loci=None,
         cur_genes=None,
         show_plateaus=False,
         gene_spacing=None
@@ -1392,9 +1389,9 @@ def plot_tsg_og_results(
     if simulated_conv_alt is None:
         simulated_conv_alt = 8*[None]
 
-    if peak_widths is not None:
-        assert final_selection_points is not None, "final_selection_points must be provided if peak_widths is provided"
-        assert len(peak_widths) == len(final_selection_points[0]), "peak_widths must be the same length as final_selection_points[0]"
+    if loci_widths is not None:
+        assert final_selection_points is not None, "final_selection_points must be provided if loci_widths is provided"
+        assert len(loci_widths) == len(final_selection_points[0]), "loci_widths must be the same length as final_selection_points[0]"
 
     assert all([x['chrom']==cur_chrom for x in data_per_length_scale.values()]), f'Wrong data_per_length_scale for current chrom {cur_chrom}'
 
@@ -1425,8 +1422,8 @@ def plot_tsg_og_results(
         direction = 1 if i % 2 == 0 else -1
         cur_segment_size = DEFAULT_SEGMENT_SIZE_DICT[data['length_scale']]
         if relative_window_size:
-            xlim = (max(0, int(cur_pos - relative_window_size*data['peak_width']*cur_segment_size)),
-                    int(min(cur_pos + relative_window_size*data['peak_width']*cur_segment_size, CHROM_LENS.loc[cur_chrom])))
+            xlim = (max(0, int(cur_pos - relative_window_size*data['loci_width']*cur_segment_size)),
+                    int(min(cur_pos + relative_window_size*data['loci_width']*cur_segment_size, CHROM_LENS.loc[cur_chrom])))
             xlim_bin = (int(xlim[0] / cur_segment_size), int(xlim[1] / cur_segment_size))
         else:
             xlim_bin = (np.array(xlim) / cur_segment_size).astype(int)
@@ -1473,7 +1470,7 @@ def plot_tsg_og_results(
                 ax.set_title(data['length_scale'])
 
         if final_selection_points is not None:
-            is_nonzero_everywhere = np.any(np.stack([[peak[0].fitness != 0 for peak in ls_selection_points] for ls_selection_points in final_selection_points]), axis=0)
+            is_nonzero_everywhere = np.any(np.stack([[locus[0].fitness != 0 for locus in ls_selection_points] for ls_selection_points in final_selection_points]), axis=0)
             for cluster_j in range(len(final_selection_points[0])):
                 if not is_nonzero_everywhere[cluster_j]:
                     continue
@@ -1500,8 +1497,8 @@ def plot_tsg_og_results(
                 ax.plot(2*[pos_j], [ymin, ymax], c='gray' if (is_current and not cur_is_nonzero) else event_colors['gain'] if is_up else event_colors['loss'],
                         ls=':' if not cur_is_nonzero else '-' if (cur_is_positive or not restrict_selection_points_to_nonzero) else '--', zorder=0, alpha=1 if is_current else 0.5,
                         lw=3 if is_current else lw)
-                if peak_widths is not None:
-                    cur_std = np.std(peak_widths[cluster_j])
+                if loci_widths is not None:
+                    cur_std = np.std(loci_widths[cluster_j])
                     # ax.axvspan(pos_j - cur_std, pos_j + cur_std, color=event_colors['gain'] if is_up else event_colors['loss'], alpha=0.125, zorder=9)
                     cur_width_patch = patches.Rectangle((pos_j - 1.5*cur_std, ymin), 3*cur_std, ymax-ymin, 
                          facecolor=event_colors['gain'] if is_up else event_colors['loss'], alpha=0.125, zorder=9, fill=True)
@@ -1532,29 +1529,29 @@ def plot_tsg_og_results(
             ylim = ax.get_ylim()
             bottom = ylim[0]
             height = ylim[1] - ylim[0]
-            if cur_biscut_peaks is not None:
+            if cur_biscut_loci is not None:
                 ax.text(xlim[0], (1-5*gene_spacing) * height + bottom, 'Biscut', fontsize=12, color='black', va='center', ha='left')
                 ax.text(xlim[0], 1*gene_spacing * height + bottom, 'Biscut', fontsize=12, color='black', va='center', ha='left')
-                for j, row in cur_biscut_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+                for j, row in cur_biscut_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                     cur_y = ((1-5*gene_spacing) if row['type'] == 'gain' else 1*gene_spacing) * height + bottom
                     ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c=colors[(row['type'], row['negpos'])], zorder=9)
                     ax.plot([row['pos']], [cur_y], 'o', markersize=genes_markersize, c=colors[(row['type'], row['negpos'])], zorder=9)
-            if cur_gistic_peaks is not None:
+            if cur_gistic_loci is not None:
                 ax.text(xlim[0], (1-4*gene_spacing) * height + bottom, 'Gistic', fontsize=12, color='black', va='center', ha='left')
                 ax.text(xlim[0], 2*gene_spacing * height + bottom, 'Gistic', fontsize=12, color='black', va='center', ha='left')
-                for j, row in cur_gistic_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+                for j, row in cur_gistic_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                     cur_y = ((1-4*gene_spacing) if row['type'] == 'gain' else 2*gene_spacing) * height + bottom
                     ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c=colors[(row['type'], 'pos')], zorder=9)
                     ax.plot([row['pos']], [cur_y], 'o', markersize=genes_markersize, c=colors[(row['type'], 'pos')], zorder=9)
-            if cur_cosmic_peaks is not None:
+            if cur_cosmic_loci is not None:
                 ax.text(xlim[0], (1-3*gene_spacing) * height + bottom, 'COSMIC', fontsize=12, color='black', va='center', ha='left')
-                for j, row in cur_cosmic_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+                for j, row in cur_cosmic_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                     cur_y = (1-3*gene_spacing) * height + bottom
                     ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c='green' if row['Tier']==1 else 'yellow', alpha=1, zorder=9)
                     ax.plot([row['pos']], [cur_y], 'x', markersize=genes_markersize, c='green' if row['Tier']==1 else 'yellow', alpha=1, zorder=9)
-            if cur_davoli_peaks is not None:
+            if cur_davoli_loci is not None:
                 ax.text(xlim[0], (1-2*gene_spacing) * height + bottom, 'Davoli', fontsize=12, color='black', va='center', ha='left')
-                for j, row in cur_davoli_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+                for j, row in cur_davoli_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                     cur_y = (1-2*gene_spacing) * height + bottom
                     ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c=event_colors['gain'] if row['which']=='og' else event_colors['loss'] if row['which']=='tsg' else 'green', alpha=1, zorder=9)
                     ax.plot([row['pos']], [cur_y], 'x', markersize=genes_markersize, c=event_colors['gain'] if row['which']=='og' else event_colors['loss'] if row['which']=='tsg' else 'green', alpha=1, zorder=9)
@@ -1572,18 +1569,18 @@ def plot_tsg_og_results(
         for ax in axs:
             ax.set_xlabel('Position [Mbp]')
     if cluster_i is not None:
-        fig.suptitle(f'{cur_chrom} - peak {cluster_i} ({up_down}) at {cur_pos:.2e}', fontsize=20)
+        fig.suptitle(f'{cur_chrom} - locus {cluster_i} ({up_down}) at {cur_pos:.2e}', fontsize=20)
     else:
-        fig.suptitle(f'{cur_chrom}' + (f': {len(final_selection_points[0])} inferred peaks' if final_selection_points is not None else ''), fontsize=20)
+        fig.suptitle(f'{cur_chrom}' + (f': {len(final_selection_points[0])} inferred loci' if final_selection_points is not None else ''), fontsize=20)
     plt.tight_layout()
 
     return fig, axs
 
 
 def _final_plot_tsg_og_results_plot_ax(ax, cur_chrom, cur_x, xlim, cur_conv, cur_signal, cur_signal_ci_low, cur_signal_ci_high,
-                                       cur_selection_points, cur_type, cur_length_scale, peak_widths=None,
-                                       gistic_peaks=None, biscut_peaks=None, genes=None, genes_on_separate_axis=None,
-                                       cosmic_peaks=None, davoli_peaks=None, cur_genes=None,
+                                       cur_selection_points, cur_type, cur_length_scale, loci_widths=None,
+                                       gistic_loci=None, biscut_loci=None, genes=None, genes_on_separate_axis=None,
+                                       cosmic_loci=None, davoli_loci=None, cur_genes=None,
                                        lw_signal=2, lw_conv=3, lw_loci=1, fontsize_genes=12, genes_markersize=8,
                                        genes_lw=3, plot_genes=True, skip_all_genes=False, adjust_gene_names=False,
                                        restrict_selection_points_to_nonzero=True, gene_spacing=0.05, xticks_stepsize=1e6):
@@ -1606,7 +1603,7 @@ def _final_plot_tsg_og_results_plot_ax(ax, cur_chrom, cur_x, xlim, cur_conv, cur
     ymin = -10
     ymax = np.max(cur_signal) * 1.5
     if cur_selection_points is not None:
-        is_nonzero_everywhere = np.any(np.stack([[peak[0].fitness != 0 for peak in ls_selection_points] for ls_selection_points in cur_selection_points]), axis=0)
+        is_nonzero_everywhere = np.any(np.stack([[locus[0].fitness != 0 for locus in ls_selection_points] for ls_selection_points in cur_selection_points]), axis=0)
 
         for cluster_j in range(len(cur_selection_points[0])):
             if not is_nonzero_everywhere[cluster_j]:
@@ -1631,8 +1628,8 @@ def _final_plot_tsg_og_results_plot_ax(ax, cur_chrom, cur_x, xlim, cur_conv, cur
                         alpha=1, zorder=9,
                         # alpha=1 if is_current else 0.25,
                         lw=lw_loci*2 if is_current else lw_loci)
-                if peak_widths is not None:
-                    cur_std = np.std(peak_widths[cluster_j])
+                if loci_widths is not None:
+                    cur_std = np.std(loci_widths[cluster_j])
                     # ax.axvspan(pos_j - cur_std, pos_j + cur_std, color=event_colors['gain'] if is_up else event_colors['loss'], alpha=0.125, zorder=9)
                     cur_width_patch = patches.Rectangle((pos_j - cur_std, ymin), 1.5*cur_std, ymax-ymin, 
                             facecolor=event_colors['gain'] if is_up else event_colors['loss'], alpha=0.125, zorder=9, fill=True)
@@ -1661,38 +1658,38 @@ def _final_plot_tsg_og_results_plot_ax(ax, cur_chrom, cur_x, xlim, cur_conv, cur
             gene_ax = ax
             height = ylim[1] - 0
 
-        if (((gistic_peaks is not None) or biscut_peaks is not None) and
-            ((cosmic_peaks is not None) or davoli_peaks is not None)):
-            raise ValueError('Conflicting peak types detected')
+        if (((gistic_loci is not None) or biscut_loci is not None) and
+            ((cosmic_loci is not None) or davoli_loci is not None)):
+            raise ValueError('Conflicting locus types detected')
 
         # Gistic
-        if gistic_peaks is not None:
-            for j, row in gistic_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+        if gistic_loci is not None:
+            for j, row in gistic_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                 cur_y = bottom
                 gene_ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c=event_colors['gain'] if row['type']=='gain' else event_colors['loss'], zorder=8)
                 gene_ax.plot([row['pos']], [cur_y], 'o', markersize=genes_markersize, c=event_colors['gain'] if row['type']=='gain' else event_colors['loss'], zorder=8)
-                gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'GISTIC peak', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
+                gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'GISTIC locus', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
         # Biscut
-        if biscut_peaks is not None:
-            for j, row in biscut_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+        if biscut_loci is not None:
+            for j, row in biscut_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                 cur_y = bottom + gene_spacing
                 gene_ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c=event_colors['gain'] if row['type']=='gain' else event_colors['loss'], zorder=8)
                 gene_ax.plot([row['pos']], [cur_y], 'o', markersize=genes_markersize, c=event_colors['gain'] if row['type']=='gain' else event_colors['loss'], zorder=8)
-                gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'BISCUT peak', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
+                gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'BISCUT locus', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
         # COSMIC
-        if cosmic_peaks is not None:
-            for j, row in cosmic_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+        if cosmic_loci is not None:
+            for j, row in cosmic_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                 cur_y = bottom
                 gene_ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c='purple', zorder=8)
                 gene_ax.plot([row['pos']], [cur_y], 'o', markersize=genes_markersize, c='purple', zorder=8)
-                # gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'COSMIC peak', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
+                # gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'COSMIC locus', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
         # Davoli
-        if davoli_peaks is not None:
-            for j, row in davoli_peaks.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
+        if davoli_loci is not None:
+            for j, row in davoli_loci.query('chrom == @cur_chrom and pos > @xlim[0] and pos < @xlim[1]').reset_index(drop=True).iterrows():
                 cur_y = bottom + gene_spacing
                 gene_ax.plot([row['start'], row['end']], [cur_y, cur_y], lw=genes_lw, c=event_colors['all'], zorder=8)
                 gene_ax.plot([row['pos']], [cur_y], 'o', markersize=genes_markersize, c=event_colors['all'], zorder=8)
-                # gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'Davoli peak', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
+                # gene_ax.text(row['pos'], cur_y + gene_spacing/2, 'Davoli locus', fontsize=fontsize_genes, color='black', va='center', ha='center', zorder=9)
         # All genes
         if genes is not None and not skip_all_genes:
             for j, row in genes.query('chrom == @cur_chrom and end > @xlim[0] and start < @xlim[1]', engine='python').reset_index(drop=False).iterrows():
@@ -1727,12 +1724,12 @@ def _final_plot_tsg_og_results_plot_ax(ax, cur_chrom, cur_x, xlim, cur_conv, cur
 def final_plot_tsg_og_results(
     cur_regions,
     all_selection_points,
-    all_peak_widths,
+    all_loci_widths,
     all_simulated_conv,
     segment_size_dict,
     all_data_per_length_scale,
-    gistic_peaks,
-    biscut_peaks,
+    gistic_loci,
+    biscut_loci,
     genes,
     plot_genes=True,
     gene_ax_ratio=0.2,
@@ -1742,8 +1739,8 @@ def final_plot_tsg_og_results(
     fontsize_genes=12,
     genes_lw=2,
     genes_markersize=8,
-    cosmic_peaks=None,
-    davoli_peaks=None,
+    cosmic_loci=None,
+    davoli_loci=None,
     skip_all_genes=False,
     all_simulated_conv_combined=None,
     all_combined_signal=None,
@@ -1822,9 +1819,9 @@ def final_plot_tsg_og_results(
             _final_plot_tsg_og_results_plot_ax(
                 axs[1] if plot_genes else axs[0], cur_chrom, cur_x, xlim, cur_conv, cur_signal, cur_signal_ci_low, cur_signal_ci_high,
                 cur_selection_points, cur_type, cur_length_scale,
-                peak_widths=all_peak_widths[cur_chrom] if all_peak_widths is not None else None,
-                gistic_peaks=gistic_peaks, biscut_peaks=biscut_peaks, genes=genes,
-                cosmic_peaks=cosmic_peaks, davoli_peaks=davoli_peaks,
+                loci_widths=all_loci_widths[cur_chrom] if all_loci_widths is not None else None,
+                gistic_loci=gistic_loci, biscut_loci=biscut_loci, genes=genes,
+                cosmic_loci=cosmic_loci, davoli_loci=davoli_loci,
                 genes_on_separate_axis=axs[0] if plot_genes else None,
                 plot_genes=plot_genes, genes_lw=genes_lw, skip_all_genes=skip_all_genes, adjust_gene_names=adjust_gene_names,
                 lw_signal=lw_signal, lw_conv=lw_conv, lw_loci=lw_loci, fontsize_genes=fontsize_genes, genes_markersize=genes_markersize,
@@ -1862,11 +1859,11 @@ def final_plot_tsg_og_results(
             _final_plot_tsg_og_results_plot_ax(
                 axs[1] if plot_genes else axs[0], cur_chrom, cur_x, xlim, cur_conv, cur_signal, cur_signal_ci_low, cur_signal_ci_high,
                 cur_selection_points, cur_type, cur_length_scale,
-                peak_widths=all_peak_widths[cur_chrom] if all_peak_widths is not None else None,
-                gistic_peaks=gistic_peaks, biscut_peaks=biscut_peaks, genes=genes, plot_genes=plot_genes,
+                loci_widths=all_loci_widths[cur_chrom] if all_loci_widths is not None else None,
+                gistic_loci=gistic_loci, biscut_loci=biscut_loci, genes=genes, plot_genes=plot_genes,
                 genes_lw=genes_lw, skip_all_genes=skip_all_genes,
                 lw_signal=lw_signal, lw_conv=lw_conv, lw_loci=lw_loci, fontsize_genes=fontsize_genes, genes_markersize=genes_markersize,
-                cosmic_peaks=cosmic_peaks, davoli_peaks=davoli_peaks, genes_on_separate_axis=axs[0] if plot_genes else None,
+                cosmic_loci=cosmic_loci, davoli_loci=davoli_loci, genes_on_separate_axis=axs[0] if plot_genes else None,
                 cur_genes=cur_genes, restrict_selection_points_to_nonzero=restrict_selection_points_to_nonzero,
                 gene_spacing=gene_spacing, xticks_stepsize=xticks_stepsize)
         

@@ -47,10 +47,6 @@ def calculate_final_events_knn_score(unique_events_df, knn_train_data, knn_k, ig
     if knn_train_data is not None:
         if isinstance(knn_train_data, str):
             knn_train_data = open_pickle(knn_train_data, fail_if_nonexisting=True)
-        elif isinstance(knn_train_data, dict):
-            pass
-        else:
-            raise ValueError('knn_train_data must be a path to a pickle file or a dictionary')
         assert isinstance(knn_train_data, dict)
         event_distances = calc_event_distances(
             knn_train_data, unique_events_df, block_same_id=False,

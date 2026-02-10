@@ -210,8 +210,8 @@ def calc_telomere_bound_whole_arm_whole_chrom(data, return_left_and_right=False)
 
 def calc_telomere_bound_left_and_right(data):
     if isinstance(data, pd.DataFrame):
-        telomere_bound_l = data['diff'].str.startswith('1').values
-        telomere_bound_r = data['diff'].str.endswith('1').values
+        telomere_bound_l = data['diff'].astype(str).str.startswith('1').values
+        telomere_bound_r = data['diff'].astype(str).str.endswith('1').values
 
     elif isinstance(data, tuple):
         assert len(data) == 6, f'Data tuple must have 6 elements. Current has {len(data)} elements.'

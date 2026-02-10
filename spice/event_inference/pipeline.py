@@ -51,7 +51,7 @@ EVENT_DF_DTYPES = {
 def full_paths_from_graph_with_sv_wrapper(
         cur_id, is_wgd, sv_data_file, chrom_segments_file, chrom_file,
         sv_matching_threshold=10, without_sv_output_dir=False,
-        all_loh_solutions=True, total_cn=False,
+        all_loh_solutions=True, total_cn=False, output_file=None,
         skip_loh_checks=False, use_cache=True, save_output=True):
     
     # Implemente here to debug the creation of the fail report
@@ -91,8 +91,9 @@ def full_paths_from_graph_with_sv_wrapper(
 
 
     if save_output:
-        log_debug(logger, f'saving file to {config["directories"]["results_dir"]}/{config["name"]}/{"wgd" if is_wgd else "nowgd"}/{full_paths_dir}/{cur_id}.pickle')
-        save_pickle(output, os.path.join(config['directories']['results_dir'], config["name"], 'wgd' if is_wgd else 'nowgd', full_paths_dir, f'{cur_id}.pickle'))
+        assert output_file is not None, "output_file must be provided if save_output is True"
+        log_debug(logger, f'saving file to {output_file}')
+        save_pickle(output, output_file)
     else:
         return output
 
@@ -390,137 +391,12 @@ def combine_final_events(solved_dirs, chrom_segments_file=None, sv_data=None,
     log_debug(logger, f'Saving final files to {output_dir}')
     if output_dir is not None:
         final_events_df.to_csv(os.path.join(output_dir, 'final_events.tsv'), sep='\t', index=False)
-        summary_df.to_csv(os.path.join(output_dir, 'summary.tsv'), sep='\t', index=True)
+        summary_df.to_csv(os.path.join(output_dir, 'events_summary.tsv'), sep='\t', index=True)
         # save_pickle(final_events_df, os.path.join(output_dir, 'final_events.pickle'))
         # save_pickle(summary_df, os.path.join(output_dir, 'summary.pickle'))
 
     return final_events_df, summary_df
 
 
-def final_quality_control(events_file, log_dir=None):
-
-    events_df = pd.read_csv(events_file, sep='\t', dtype={'id': str, 'diff': str})
-    events_df['loh_shortened_event'] = events_df['diff'].map(lambda x: '0' in x[x.find('1'):x.rfind('1')])
-
-    file_overview = []
-    for folder in ['chrom_data_full', 'chrom_data_large', 'full_paths_created', 'full_paths_multiple_solutions',
-                   'full_paths_single_solution', 'knn_solved_chroms', 'mcmc_solved_chroms_large', 'mcmc_solved_chroms_full']:
-        cur_files = []
-        for wgd in ['nowgd', 'wgd']:
-            cur_dir = os.path.join(os.path.dirname(events_file), wgd, folder)
-            if not os.path.exists(cur_dir):
-                cur_files.append(pd.DataFrame(columns=[folder]))
-                continue
-            cur_ids = [x.replace('.pickle', '').replace('.placeholder', '') for x in os.listdir(cur_dir) if x.endswith('.pickle') or x.endswith('.placeholder')]
-            cur_files.append(pd.DataFrame(True, index=cur_ids, columns=[folder]))
-        if len(cur_files) == 0:
-            cur_files.append(pd.DataFrame(False, columns=[folder]))
-            continue 
-        cur = pd.concat(cur_files, axis=1)
-        cur = ~cur.isna()
-        file_overview.append(cur.any(axis=1).to_frame(folder))
-    file_overview = pd.concat(file_overview, axis=1)
-    # fillna does not work with bools
-    file_overview = ~file_overview.isna()
-    file_overview.to_csv(os.path.join(os.path.dirname(events_file), 'file_overview.tsv'), sep='\t', index=True)
-
-    Test = namedtuple('Test', ['test', 'type', 'message'])
-    tests = [
-        Test(not events_df.isna().any().any(),
-             'final_df', f'some columns have NAs: {events_df.columns[events_df.isna().any()].values}'),
-        Test((events_df.query('solved=="single"')['events_per_chrom'] == 1).all(),
-             'final_df', 'not all single have single event'),
-        Test(len(events_df) == events_df.drop_duplicates('id')['events_per_chrom'].sum(),
-            'final_df', "length of df ({len(events_df)}) does not match expected nr of events ({events_df.drop_duplicates('id')['events_per_chrom'].sum()}) "
-            f" for IDs {(events_df.groupby('id').size() != events_df.groupby('id')['events_per_chrom'].first()).to_frame('test').query('test').index.values}"),
-        Test(len(events_df.index) == len(events_df.index.unique()),
-             'final_df', 'not all index values are unique'),
-        Test(events_df.query('solved=="sv"').groupby('id')['SV_overlap'].any().all(),
-            'final_df', 'not all sv solved events have sv overlap'),
-        Test(np.isfinite(events_df['knn_score'].max()),
-             'final_df', 'knn score is not finite'),
-        Test(np.isin(events_df['type'], ['gain', 'loss']).all(),
-             'final_df', 'not all events are gain or loss'),
-        Test(events_df.loc[events_df['diff'].str.startswith('1') & events_df['diff'].str.endswith('1'), 'whole_chrom'].all(),
-             'final_df', 'incorrect whole-chrom assignment'),
-        Test(events_df.loc[events_df['diff'].str.startswith('1') | events_df['diff'].str.endswith('1'), 'telomere_bound'].all(),
-             'final_df', 'incorrect telomere-bound assignment'),
-        Test(events_df.eval('loh_shortened_event or (end - start) == width').all(),
-             'final_df', 'not all events have end - start == width'),
-        Test(events_df.loc[events_df['diff'].str.endswith('1')].eval('end == chrom_length').all(),
-             'final_df', 'not all ..1 events end at chromosome length'),
-        Test(events_df.eval('whole_chrom or ((width != actual_chrom_length) or (width != chrom_length))').all(),
-             'final_df', 'non-whole-chrom events span the whole chromosome'),
-        Test(events_df.loc[events_df['diff'].str.startswith('1')].eval('start == 0 or ((chrom == "chr13") or (chrom == "chr14") or (chrom == "chr15") or (chrom == "chr21") or (chrom != "chr22"))').all(),
-                'final_df', 'not all 1.. events start at 0'),
-        Test(events_df.loc[events_df['diff'].str.count('1') == events_df['diff'].str.len()].eval('width == actual_chrom_length').all(),
-                'final_df', 'not all whole chrom events have width == chrom_length'),
-        Test(events_df.eval('actual_chrom_length <= chrom_length').all(),
-                'final_df', 'not all actual_chrom_length <= chrom_length'),
-        Test(events_df.eval('not whole_chrom or (whole_chrom and telomere_bound)').all(),
-                'final_df', 'not all whole_chrom events are telomere bound'),
-        Test(events_df.eval('not whole_arm or (whole_arm and telomere_bound)').all(),
-                'final_df', 'not all whole_arm events are telomere bound'),
-        Test(events_df.eval('not (whole_chrom and whole_arm)').all(),
-                'final_df', 'some events are both whole_chrom and whole_arm'),
-        
-        Test(np.isin(events_df['id'], file_overview.index.values).all(),
-            'final_df', f'not all ids from final_df are in file_overview: {np.setdiff1d(events_df["id"], file_overview.index.values)}'),
-        # The below errouneously fails for MCMC that time out
-        # Test(np.isin(file_overview.index.values, events_df['id']).all(),
-        #     'file_overview', f'not all ids from file_overview are in final_df: {np.setdiff1d(file_overview.index.values, events_df["id"])}'),
-    ]
-
-    # tuples of length 2: if file exists in any of the dirs in the first entry it hast to exist in all of
-    # the first entries and cannot exist in any of the dirs of the second entry, and vice verse
-    dir_groups = [
-        (['chrom_data_full'], 
-         ['chrom_data_large', 'mcmc_solved_chroms_large']),
-        (['full_paths_multiple_solutions', 'knn_solved_chroms'], 
-         ['chrom_data_large', 'mcmc_solved_chroms_large']),
-        (['full_paths_multiple_solutions', 'knn_solved_chroms'],
-        ['full_paths_single_solution'])
-        ]
-    
-    for dir_group in dir_groups:
-        tests.extend([
-            Test(file_overview.loc[file_overview[dir_group[0]].any(axis=1)][dir_group[0]].all(axis=1).all(),
-                 'file_overview', f'Some files are missing for: {dir_group[0]}'),
-            Test(file_overview.loc[file_overview[dir_group[1]].any(axis=1)][dir_group[1]].all(axis=1).all(),
-                 'file_overview', f'Some files are missing for: {dir_group[1]}'),
-            Test(not file_overview.loc[file_overview[dir_group[0]].any(axis=1)][dir_group[1]].any(axis=1).any(),
-                 'file_overview', f'Some files are in both groups for: {dir_group}'),
-            Test(not file_overview.loc[file_overview[dir_group[1]].any(axis=1)][dir_group[0]].any(axis=1).any(),
-                 'file_overview', f'Some files are in both groups for: {dir_group}')
-        ])
-
-    # as full path creation can fail, have to check that files from chrom_data_full are solved either by knn or mcmc
-    tests.append(Test(file_overview.loc[file_overview['chrom_data_full'], ['full_paths_created', 'mcmc_solved_chroms_full']].any(axis=1).all(),
-                        'file_overview', 'Some files are missing for chrom_data_full'))
-
-
-    passed = True
-    for test in tests:
-        if not test.test:
-            logger.error(f'{test.type}: {test.message}')
-            passed = False
-    
-    assert passed, 'Quality control failed'
-    log_debug(logger, f"passed all {len(tests)} tests")
-
-    if log_dir is not None:
-        import subprocess
-
-        command = f"grep 'WARNING' {log_dir}/*"
-        try:
-            result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
-            warnings = [w.replace(log_dir+'/', ' ') for w in result.stdout.split('\n') if len(w) > 0]
-            log_debug(logger, f"Found {len(warnings)} WARNINGS in the logs ({log_dir})")
-            with open(os.path.join(os.path.dirname(events_file), 'log_warnings.txt'), 'w') as f:
-                f.write('\n'.join(warnings))
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"Error while checking log directory: {e}")
-
-        
 if __name__ == '__main__':
   fire.Fire()

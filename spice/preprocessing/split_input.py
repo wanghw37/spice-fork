@@ -4,8 +4,9 @@ from joblib import Parallel, delayed
 import pandas as pd
 import fstlib
 
-from spice.utils import get_logger, save_pickle, open_pickle, log_debug
-from spice.data_loaders import resolve_data_file, load_cn_tsv
+from spice.utils import save_pickle, open_pickle
+from spice.logging import log_debug, get_logger
+from spice.data_loaders import resolve_copynumber_file, load_raw_copy_number_data
 from spice.event_inference.fst_assets import nowgd_fst, get_diploid_fsa, T_forced_WGD
 from spice.event_inference.fsts import fsa_from_string
 from spice.event_inference.events_from_graph import create_events_df_from_single_path_solution
@@ -51,17 +52,17 @@ def _prepare_split_inputs(name, keep_old=False, selected_ids=None):
 
     Returns a context dict and a list of grouped chromosome dataframes.
     """
-    results_dir = os.path.join(config['directories']['results_dir'], name)
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+    results_events_dir = os.path.join(config['directories']['results_dir'], name, 'events')
+    if not os.path.exists(results_events_dir):
+        os.makedirs(results_events_dir)
 
     total_cn = config['input_files'].get('total_cn', False)
 
-    copynumber_file = resolve_data_file(return_raw=True)
+    copynumber_file = resolve_copynumber_file(return_raw=True)
     diploid_fsas = {b: get_diploid_fsa(total_copy_numbers=b) for b in [False, True]}
 
     log_debug(logger, f"Loading from input file: {copynumber_file}")
-    data = load_cn_tsv(copynumber_file)
+    data = load_raw_copy_number_data(copynumber_file)
     data = data[['sample_id', 'chrom', 'start', 'end', 'cn_a', 'cn_b']]
     if data['sample_id'].str.contains(':').any():
         raise ValueError('Sample IDs in input file cannot contain ":" character.')
@@ -105,7 +106,7 @@ def _prepare_split_inputs(name, keep_old=False, selected_ids=None):
         log_debug(logger, 'Deleting old files')
     directories = [f'{wgd}/{subdir}' for wgd in ['nowgd', 'wgd'] for subdir in ['chrom_data_full', 'chrom_data_large']]
     for directory in directories:
-        directory = os.path.join(results_dir, directory)
+        directory = os.path.join(results_events_dir, directory)
         if not os.path.exists(directory):
             os.makedirs(directory)
         elif not keep_old:
@@ -116,7 +117,7 @@ def _prepare_split_inputs(name, keep_old=False, selected_ids=None):
     tasks = list(groupby)
 
     context = {
-        'results_dir': results_dir,
+        'results_events_dir': results_events_dir,
         'total_cn': total_cn,
         'xy_samples': xy_samples,
         'wgd_status': wgd_status,
@@ -144,7 +145,7 @@ def _process_group(context, key, chrom_segments):
         return neutral_value
 
     (cur_sample, cur_chrom, cur_allele) = key
-    results_dir = context['results_dir']
+    results_events_dir = context['results_events_dir']
     total_cn = context['total_cn']
     xy_samples = context['xy_samples']
     wgd_status = context['wgd_status']
@@ -180,8 +181,8 @@ def _process_group(context, key, chrom_segments):
         cur = create_events_df_from_single_path_solution(
             lookup_table_single_solution[(wgd, chrom_string)], cur_id, chrom_segments=chrom_segments,
             create_full=True, calc_telomere_bound=False)
-        save_pickle(cur,
-                    os.path.join(str(results_dir), 'wgd' if wgd else 'nowgd', 'full_paths_single_solution', f"{cur_id}.pickle"))
+        save_pickle(
+            cur, os.path.join(str(results_events_dir), 'wgd' if wgd else 'nowgd', 'full_paths_single_solution', f"{cur_id}.pickle"))
         log_debug(logger, f'{cur_id}: Found in lookup table! Copy-number profile = {chrom_string}. Nr of events = {n_events}. Saved to {"wgd" if wgd else "nowgd"}/full_paths_single_solution')
         return ('single', cur_id)
     elif (wgd, chrom_string) in lookup_table_multiple_solutions:
@@ -190,7 +191,7 @@ def _process_group(context, key, chrom_segments):
         assert cur.is_wgd == wgd, (cur.is_wgd, wgd)
         cur = cur._replace(id=cur_id, sample=cur_sample, chrom=cur_chrom, allele=cur_allele)
         save_pickle(cur,
-                    os.path.join(str(results_dir), 'wgd' if wgd else 'nowgd', 'full_paths_multiple_solutions', f"{cur_id}.pickle"))
+                    os.path.join(str(results_events_dir), 'wgd' if wgd else 'nowgd', 'full_paths_multiple_solutions', f"{cur_id}.pickle"))
         log_debug(logger, f'{cur_id}: Found in lookup table! Copy-number profile = {chrom_string}. Nr of events = {n_events}. Saved to {"wgd" if wgd else "nowgd"}/full_paths_multiple_solutions')
         return ('multiple', cur_id)
 
@@ -201,14 +202,14 @@ def _process_group(context, key, chrom_segments):
     assert config['params']['full_path_high_mem_dist_limit'] <= config['params']['full_path_dist_limit']
 
     if (chrom_dist - int(wgd)) <= config['params']['full_path_dist_limit']:
-        log_debug(logger, f'{cur_id}: Copy-number profile = {chrom_string}. Nr of events = {n_events}. Saved to {"wgd" if wgd else "nowgd"}/chrom_data_full')
-        save_pickle(chrom_data, os.path.join(str(results_dir), 'wgd' if wgd else 'nowgd', 'chrom_data_full', f"{cur_id}.pickle"))
+        log_debug(logger, f'{cur_id}: Copy-number profile = {chrom_string}. Nr of events = {n_events}. Saved to {"events/wgd" if wgd else "events/nowgd"}/chrom_data_full')
+        save_pickle(chrom_data, os.path.join(str(results_events_dir), 'wgd' if wgd else 'nowgd', 'chrom_data_full', f"{cur_id}.pickle"))
         if (chrom_dist - int(wgd)) > config['params']['full_path_high_mem_dist_limit']:
-            save_pickle(None, os.path.join(str(results_dir), 'wgd' if wgd else 'nowgd', 'chrom_data_use_high_memory', f"{cur_id}.placeholder"))
+            save_pickle(None, os.path.join(str(results_events_dir), 'wgd' if wgd else 'nowgd', 'chrom_data_use_high_memory', f"{cur_id}.placeholder"))
         return ('full', cur_id)
     else:
-        log_debug(logger, f'{cur_id}: Copy-number profile = {chrom_string}. Nr of events = {n_events}. Saved to {"wgd" if wgd else "nowgd"}/chrom_data_large')
-        save_pickle(chrom_data, os.path.join(str(results_dir), "wgd" if wgd else "nowgd", 'chrom_data_large', f"{cur_id}.pickle"))
+        log_debug(logger, f'{cur_id}: Copy-number profile = {chrom_string}. Nr of events = {n_events}. Saved to {"events/wgd" if wgd else "events/nowgd"}/chrom_data_large')
+        save_pickle(chrom_data, os.path.join(str(results_events_dir), "wgd" if wgd else "nowgd", 'chrom_data_large', f"{cur_id}.pickle"))
         return ('large', cur_id)
 
 

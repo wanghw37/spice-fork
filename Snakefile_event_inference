@@ -200,7 +200,7 @@ def get_mcmc_large_outputs(wildcards):
 rule all:
     input:
         os.path.join(results_dir, "final_events.tsv"),
-        os.path.join(results_dir, "summary.tsv"),
+        os.path.join(results_dir, "events_summary.tsv"),
 
 
 rule aggregate_full_paths:
@@ -587,7 +587,7 @@ rule combine:
         knn_outputs=get_disambiguate_knn_outputs,
     output:
         os.path.join(results_dir, "final_events.tsv"),
-        os.path.join(results_dir, "summary.tsv"),
+        os.path.join(results_dir, "events_summary.tsv"),
     log:
         os.path.join(log_dir, "snakemake_combine.log")
     resources:

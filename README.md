@@ -5,16 +5,16 @@
 **SPICE**, Selection Patterns In somatic Copy-number Events, is an event-level framework that infers discrete copy-number events from allele-specific profiles.
 
 
-## Installation
+## 0. Installation
 
-### Prerequisites
+### 0.1. Prerequisites
 - Python >= 3.8
 - medicc2 (including openfst)
 
-### Install from pip/conda (recommended)
+### 0.2. Install from pip/conda (recommended)
 Coming soon!
 
-### Install from source
+### 0.3 Install from source
 
 1. Install MEDICC2 using conda/mamba:
 ```bash
@@ -40,7 +40,7 @@ pip install -e .
 
 This will install SPICE and all its dependencies, and make the `spice` command available in your shell.
 
-### Dependencies
+### 0.4 Dependencies
 
 SPICE automatically installs the following dependencies:
 - numpy
@@ -50,7 +50,7 @@ SPICE automatically installs the following dependencies:
 - joblib
 - ortools (version 9.8.3296)
 
-### Optional Dependencies
+### 0.5 Optional Dependencies
 
 To use SPICE with Snakemake for parallel execution on computing clusters, install snakemake separately:
 ```bash
@@ -58,14 +58,14 @@ conda install bioconda::snakemake
 ```
 
 
-## Configuration
+## 1. Configuration
 
 SPICE uses a configuration file for each run which are specified using the `--config` flag.
 This means you can keep multiple configs (e.g., in `configs/`) and select them at runtime.
 
 Parameters and directories not specified in the provided config file are taken from the default config file `default_config.yaml`.
 
-### Minimal `config.yaml` override example
+### 1.1 Minimal `config.yaml` override example
 Each config must contain a name and the location of the input copy-number file like so:
 ```yaml
 name: example_run
@@ -75,13 +75,84 @@ input_files:
 
 For other parameters that can be modified, see `default_config.yaml`.
 
-### Relative vs absolute paths
+### 1.2 Relative vs absolute paths
 
 - `directories.*` entries (e.g., `data_dir`, `results_dir`, `log_dir`) as well as input files can be given as relative or absolute paths.
    - If relative, SPICE resolves them against the package root (i.e., the repository directory when installed in editable mode).
    - If absolute, SPICE uses them as-is.
 
-### WGD Detection
+
+## 2. Usage Overview
+
+SPICE has four main modes:
+- **event_inference**: Infer discrete copy-number events from allele-specific profiles
+- **loci_detection**: Detect recurrent copy-number loci across samples
+- **loci_assignment**: Assign loci to samples based on detected loci patterns
+- **plotting**: Generate visualizations of inferred events and detected loci
+
+
+### 2.1 Top-level execution examples
+
+```bash
+# Event inference
+spice event_inference --config configs/events_example.yaml
+
+# Loci detection
+spice loci_detection --config configs/loci_example.yaml
+
+# Loci assignment
+spice loci_assignment --config configs/loci_example.yaml
+
+# Plotting
+spice plotting --config <path/to/config> --plot-events-per-sample <SAMPLE_ID>
+```
+
+For large datasets, we recommend using Snakemake mode on a computing cluster (see respective sections below).
+
+---
+
+## 3. Event Inference
+
+Event inference infers discrete copy-number events from allele-specific copy-number profiles by enumerating valid evolutionary paths through the copy-number landscape and selecting the most likely path using k-nearest neighbors or MCMC sampling.
+
+**Note that spice automatically deletes previous runs of the same name when it is rerun.**
+
+### 3.1 Pipeline Overview
+
+The event inference pipeline runs 6 steps:
+- `preprocessing`: Extra preprocessing (filling telomeres, phasing, etc.)
+- `split`: Split haplotypes and preprocess input
+- `all_solutions`: Enumerate all valid evolutionary paths
+- `disambiguate`: Select best path using k-nearest neighbors
+- `large_chroms`: Use MCMC sampling for chromosomes with many events
+- `combine`: Combine all events into the final output
+
+For each step, nonWGD and WGD samples are treated separately and samples are split by chromosome and allele to give the file IDs "sample:chrom:allele". For each step, each ID is calculated separately and stored as separate files.
+
+Intermediate files can be removed using
+```bash
+spice event_inference --clean --config <path/to/config>
+```
+
+### 3.2 Expected Input
+
+SPICE expects tab-separated input files with copy-number segments. See example file `data/example_data.tsv`.
+
+**Required columns:**
+- `sample`: Sample identifier
+- `chrom`: Chromosome name
+- `start`: Segment start position
+- `end`: Segment end position
+- `cn_a`: Copy number for allele A (haplotype-specific)
+- `cn_b`: Copy number for allele B (haplotype-specific)
+
+**Optional files:**
+- `wgd_status`: TSV with WGD status per sample (see section 1.3)
+- `xy_samples`: TSV with sex status per sample (see section 1.4)
+
+Total copy-number mode can be enabled by setting `params.total_cn: True` in the config file.
+
+#### 3.2.1 WGD Detection
 
 SPICE supports two ways to determine WGD (whole genome duplication) status per sample. The pipeline branches on WGD status and uses different FSTs and neutral CN values accordingly.
 
@@ -95,7 +166,6 @@ SPICE supports two ways to determine WGD (whole genome duplication) status per s
       SA456	False
       ```
 
-
 - Inferred WGD status:
    - If `input_files.wgd_status` is missing or empty, SPICE infers WGD using copy-number data and the method specified by `params.wgd_inference_method`.
    - Supported values:
@@ -106,7 +176,7 @@ Notes
 - WGD status impacts neutral CN values and constraint solving throughout the pipeline, so ensure this is set or inferred correctly.
 - For haplotype-specific data, neutral CN is 1 (noWGD) vs 2 (WGD); for total CN, 2 vs 4 respectively.
 
-### Sex (XY/XX) Detection
+#### 3.2.2 Sex (XY/XX) Detection
 
 SPICE supports resolving sample sex (XY vs XX) either via a provided file or automatic inference. This affects handling of `chrX` and `chrY` in preprocessing and splitting.
 
@@ -128,134 +198,16 @@ Effects
 - For XX samples, `chrY` is excluded (no segments on `chrY`).
 
 
-## Usage
 
-SPICE has three main modes:
-- **event_inference**: Infer discrete copy-number events from profiles
-- **loci_detection**: Detect recurrent copy-number loci across samples
-- **plotting**: Generate visualizations of inferred events and detected loci
-
-
-Example usage
-
-```bash
-spice event_inference --config configs/example_config.yaml
-```
-
-**For large datasets we recommend using the Snakemake mode on a computing cluster (see below)**.
-
-**Note that spice automatically deletes previous runs of the same name when it is rerun.**
-
-### Event Inference
-
-The event inference pipeline runs 5 steps:
-- `preprocessing`: Extra preprocessing (filling telomeres, phasing, etc.)
-- `split`: Split haplotypes and preprocess input
-- `all_solutions`: Enumerate all valid evolutionary paths
-- `disambiguate`: Select best path using k-nearest neighbors
-- `large_chroms`: Use MCMC sampling for chromosomes with many events
-- `combine`: Combine all events into the final output
-
-For each step, nonWGD and WGD samples are treated separately and samples are split by chromosome and allele to give the file IDs "sample:chrom:allele". For each step, each ID is calculated separately and stored as separate files.
-
-Intermediate files can be removed using
-```bash
-spice event_inference --clean --config <path/to/config>
-```
-
-
-#### Preprocessing Step Details
-
-The preprocessing step runs automatically (unless `--skip-preprocessing` is provided) and prepares the input for robust event inference. It performs:
-
-- Data normalization: ensures chromosome names use `chr` prefix; converts starts/ends to integers and adjusts starts to 0-based.
-- CN capping and filtering: caps copy numbers at 8; removes segments shorter than 1kb.
-- WGD resolution: loads from `wgd_status.tsv` or infers as described in WGD Detection.
-- Sex resolution: loads from `xy_samples.tsv` or infers by presence of `chrY`; for XY samples with haplotype-specific CN, sets minor CN of `chrX` and `chrY` to 0.
-- Neighbor merging: merges adjacent segments with identical CNs to reduce fragmentation.
-- Telomeres and centromeres: fills telomeric regions and optionally bins/unifies centromeres (can be skipped with `--pre-skip-centromeres`).
-- MEDICC2 phasing: optional phasing of haplotypes; can be skipped with `--pre-skip-phasing`.
-- Short arms and bounds: handles short arms and aligns segment ends to reference chromosome lengths.
-
-Run control:
-- Use `--skip-preprocessing` to bypass this step and proceed directly to `split`.
-
-
-
-
-#### Parallel processing
-
-Use multiple cores for event inference:
-```bash
-# Use 8 cores
-spice event_inference --config <path/to/config> --cores 8
-```
-While using multiple cores can technically make execution faster (especially in the case when spice takes a long time for single runs), it can also slow down execution when there are many entries to loop over.
-We usually recommend to only use multiple cores for the `large_chroms` pipeline step as it takes the longest per sample.
-
-Note that parallel processing will disable logging for the different subprocesses.
-
-### Logging output
-
-Control where logging output is sent with the `--log` flag:
-
-* `--log terminal` (default): Writes logs to terminal only
-* `--log file`: Writes logs to file only
-* `--log both`: Writes logs to both terminal and file
-
-When using `--log file` or `--log both`, logs are saved to the configured log directory from the config with a filename pattern: `{name}_{timestamp}.log`
-
-### Dection of loci of selection
-
-Coming soon!
-
-
-### Plotting
-
-Plotting inferred events can be done on the sample or ID (sample, chromosome, allele) level.
-
-```bash
-# Plot inferred events per sample
-spice plotting --config <path/to/config> --plot-sample <SAMPLE_ID>
-spice plotting --config <path/to/config> --plot-sample <SAMPLE_ID> --plot-unit-size
-
-# Plot per ID (format: sample:chr:cn_a|cn_b)
-spice plotting --config <path/to/config> --plot-id <sample:chr:allele>
-```
-
-Notes for plotting:
-- Plotting requires `final_events.tsv` (produced by the `combine` step in event_inference).
-- Output PNGs are saved to `plot_dir/{name}/` (see `directories.plot_dir` in config; defaults to `plots/`).
-- `--plot-unit-size` switches per-sample plots to unit-size segments.
-- You must specify either `--plot-sample` or `--plot-id` (not both).
-
-For interactive exploration, see `notebooks/plotting.ipynb`.
-
-
-
-## Input Format
-
-SPICE expects tab-separated input files with copy-number segments. See example file `data/example_data.tsv`.
-
-Required columns:
-- `sample`: Sample identifier
-- `chrom`: Chromosome name
-- `start`: Segment start position
-- `end`: Segment end position
-- `cn_a`: Copy number for allele A (haplotype-specific)
-- `cn_b`: Copy number for allele B (haplotype-specific only)
-
-Total copy-number mode can be enabled by setting `params.total_cn: True` in the config file.
-
-## Output
+### 3.3 Expected Output
 
 Results are saved in `results/{name}/`
 
-The two main outputs are `summary.tsv` which is a summary over each ID (i.e. combination of sample, chromosome and allele) and the `final_events_df.tsv` which is a list of all inferred events.
+**Main outputs:**
+- `final_events.tsv`: Summary of inferred events per sample/chromosome/allele with event types, coordinates, and validation metrics
+- `events_summary.tsv`: Summary statistics for each ID (sample, chromosome, allele combination), including number of events and path selection method
 
-### Intermediate files
-
-The intermediate files are saved with separate directories for WGD and non-WGD profiles:
+**Intermediate files** (with separate directories for WGD and non-WGD profiles):
 - `chrom_data_full/`: Preprocessed chromosome data
 - `full_paths_single_solution/`: Chromosomes with unique solutions
 - `full_paths_multiple_solutions/`: Chromosomes requiring kNN selection
@@ -268,19 +220,37 @@ Intermediate files can be removed using
 spice event_inference --clean --config <path/to/config>
 ```
 
-## Advanced Usage
+### 3.4 Preprocessing Step Details
 
-### Run specific pipeline steps
+The preprocessing step runs automatically (unless `--skip-preprocessing` is provided) and prepares the input for robust event inference. It performs:
 
-The SPICE event reconstruction has 5 sub-steps:
-- `split`: Split haplotypes and preprocess input
-- `all_solutions`: Enumerate all valid evolutionary paths
-- `disambiguate`: Select best path using k-nearest neighbors
-- `large_chroms`: Use MCMC sampling for chromosomes with many events
-- `combine`: Combine all events into the final output
+- Data normalization: ensures chromosome names use `chr` prefix; converts starts/ends to integers and adjusts starts to 0-based.
+- CN capping and filtering: caps copy numbers at 8; removes segments shorter than 1kb.
+- WGD resolution: loads from `wgd_status.tsv` or infers as described in section 1.3.
+- Sex resolution: loads from `xy_samples.tsv` or infers by presence of `chrY`; for XY samples with haplotype-specific CN, sets minor CN of `chrX` and `chrY` to 0.
+- Neighbor merging: merges adjacent segments with identical CNs to reduce fragmentation.
+- Telomeres and centromeres: fills telomeric regions and optionally bins/unifies centromeres (can be skipped with `--pre-skip-centromeres`).
+- MEDICC2 phasing: optional phasing of haplotypes; can be skipped with `--pre-skip-phasing`.
+- Short arms and bounds: handles short arms and aligns segment ends to reference chromosome lengths.
+
+Run control:
+- Use `--skip-preprocessing` to bypass this step and proceed directly to `split`.
+
+### 3.5 Parallel Processing
+
+Use multiple cores for event inference:
+```bash
+# Use 8 cores
+spice event_inference --config <path/to/config> --cores 8
 ```
+While using multiple cores can technically make execution faster (especially in the case when spice takes a long time for single runs), it can also slow down execution when there are many entries to loop over.
+We usually recommend to only use multiple cores for the `large_chroms` pipeline step as it takes the longest per sample.
 
-To run specific steps, use the `--steps` flag:
+Note that parallel processing will disable logging for the different subprocesses.
+
+### 3.6 Run Specific Pipeline Steps
+
+The SPICE event reconstruction has 6 sub-steps. To run specific steps, use the `--steps` flag:
 
 ```bash
 # Run only input splitting
@@ -296,10 +266,9 @@ spice large_chroms --config <path/to/config>
 spice --config <path/to/config> --steps split+
 ```
 
+### 3.7 Snakemake Execution
 
-### Using with Snakemake
-
-The SPICE Snakemake workflow mirrors the full event inference pipeline.
+For parallel execution on computing clusters, use the Snakemake workflow.
 
 **Note:** Snakemake must be installed separately:
 ```bash
@@ -314,9 +283,119 @@ spice --config <path/to/config> --snakemake --snakemake-mode local --snakemake-c
 spice --config <path/to/config> --snakemake --snakemake-mode slurm --snakemake-jobs 250
 ```
 
-**Note:** If you get a `LockException` run `spice --config configs/example_config.yaml --unlock` to remove the lock.
+**Note:** If you get a `LockException` run `spice --config configs/events_example.yaml --unlock` to remove the lock.
 
-### Python API
+### 3.8 Logging Output
+
+Control where logging output is sent with the `--log` flag:
+
+* `--log terminal` (default): Writes logs to terminal only
+* `--log file`: Writes logs to file only
+* `--log both`: Writes logs to both terminal and file
+
+When using `--log file` or `--log both`, logs are saved to the configured log directory from the config with a filename pattern: `{name}_{timestamp}.log`
+
+---
+
+## 4. Loci Detection
+
+Loci detection identifies recurrently gained or lost copy-number loci across a cohort of samples.
+
+**NOTE that SPICE requires a large cohort for de-novo loci calling and it will likely not produce good results for cohorts with less than 1000 samples**
+
+### 4.1 Pipeline Overview
+
+Coming soon!
+
+### 4.2 Expected Input
+
+Loci detection requires:
+- **Event inference results**: `final_events.tsv` produced by the event_inference pipeline
+
+### 4.3 Expected Output
+
+Results are saved in `results/{name}`
+
+**Main outputs:**
+- `detected_loci.tsv`: List of detected recurrent loci with coordinates and occurrence statistics
+- `loci_summary.tsv`: Summary statistics for each detected locus
+
+Intermediate files are saved in `results/{name}/events`
+
+---
+
+## 5. Loci Assignment
+
+Loci assignment assigns predetermined loci to a cohort. This is recommended for smaller cohorts where de-novo loci detection is prohibited.
+
+### 5.1 Pipeline Overview
+
+Coming soon!
+
+### 5.2 Expected Input
+
+Loci assignment requires:
+- **Reference loci**: `objects/reference_loci_position.tsv` reference loci set created on TCGA data
+- **Event inference results**: `final_events.tsv` produced by the event_inference pipeline
+
+### 5.3 Expected Output
+
+Results are saved in `results/{name}/`
+
+**Main outputs:**
+- `loci_assignments.tsv`: Assignment of loci to samples with presence/absence or quantitative scores
+- `loci_sample_matrix.tsv`: Binary or weighted matrix of loci (rows) by samples (columns)
+
+---
+
+## 6. Plotting
+
+Plotting generates visualizations of inferred events and detected loci to aid in manual inspection and interpretation of results.
+
+### 6.1 Event Visualization
+
+Plotting inferred events can be done on the sample or ID (sample, chromosome, allele) level.
+
+```bash
+# Plot inferred events per sample
+spice plotting --config <path/to/config> --plot-events-per-sample <SAMPLE_ID>
+spice plotting --config <path/to/config> --plot-events-per-sample <SAMPLE_ID> --plot-unit-size
+
+# Plot per ID (format: sample:chr:cn_a|cn_b)
+spice plotting --config <path/to/config> --plot-events-per-id <sample:chr:allele>
+```
+
+**Requirements:**
+- Plotting requires `final_events.tsv`.
+- Output PNGs are saved to `plot_dir/{name}/` (see `directories.plot_dir` in config; defaults to `plots/`).
+- `--plot-unit-size` switches per-sample plots to unit-size segments.
+
+For interactive exploration, see `notebooks/events_plotting.ipynb`.
+
+### 6.2 Loci Visualization
+
+Plotting detected or assigned loci can be done on the chromosome or loci level.
+
+```bash
+# Plot detected/assigned loci for chromosome 1
+spice plotting --config <path/to/config> --plot-loci-on-chrom chr1 --loci-mode detection
+spice plotting --config <path/to/config> --plot-loci-on-chrom chr1 --loci-mode assignment
+
+# Plot the detected locus "3" (corresponds to the index in the final_loci_detection.tsv file)
+spice plotting --config <path/to/config> --plot-single-locus 3 --loci-mode detection
+```
+
+**Requirements:**
+- Plotting requires `final_loci_detection.tsv` or `final_loci_assignment.tsv`.
+- Output PNGs are saved to `plot_dir/{name}/` (see `directories.plot_dir` in config; defaults to `plots/`).
+
+For interactive exploration, see `notebooks/loci_plotting.ipynb`.
+
+---
+
+## 7. Advanced Usage
+
+### 7.1 Python API
 
 You can also import and use SPICE functions directly in Python. Note that it is important to run `spice.load_config(config_file)` before any other spice imports
 ```python
@@ -327,15 +406,16 @@ from spice.knn_graph import solve_with_knn
 from spice.mcmc_for_large_chroms import mcmc_event_selection
 ```
 
-## Citation
+
+## 8. Citation
 
 If you use SPICE in your research, please cite: [TODO]
 
-## License
+## 9. License
 
 [TODO]
 
-## Contact
+## 10. Contact
 
 For questions and issues, please contact: tom.kaufmann@iccb-cologne.org
 
