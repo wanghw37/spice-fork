@@ -84,7 +84,6 @@ def calc_event_distances(train_events, test_events, wgd_split=True, block_same_i
                 (events_data.wgd == pre_post_wgd)
             ])
         if cur_mask_test.sum() == 0:
-            log_debug(logger, f'no test events for {cur_type} {"telomere-bound" if telomere_bound else "internal"} - skipping it')
             continue
         cur_train_events = train_events[(cur_type, telomere_bound, pre_post_wgd)]
         cur_n_train = len(cur_train_events[0])

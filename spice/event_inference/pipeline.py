@@ -179,6 +179,9 @@ def solve_with_knn_wrapper(cur_id, chrom_segments_file, full_paths_multiple_solu
 
     cur_chrom_segments = pd.read_csv(chrom_segments_file, sep='\t', index_col=['sample_id', 'chrom', 'allele']).query('id == @cur_id')
 
+    assert all([len(full_paths.events[0].diff) == len(full_paths.events[i].diff) for i in range(len(full_paths.events))]), 'All events must have the same length of diff string'
+    assert len(cur_chrom_segments) == len(full_paths.events[0].diff)
+
     log_debug(logger, f"KNN-graph solving for {cur_id} ({'WGD' if is_wgd else 'noWGD'}). CN profile: {full_paths.cn_profile}, n_solutions: {full_paths.n_solutions}, n_events: {full_paths.n_events}")
 
     if full_paths.solved in ['sv', 'unamb']:
