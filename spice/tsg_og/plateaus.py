@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from cn_signatures.utils import get_logger
+from spice.utils import get_logger
 
 
 logger = get_logger(__name__)

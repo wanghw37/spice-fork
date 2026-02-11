@@ -2,55 +2,14 @@ import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
 
-from cn_signatures import data_loaders
-from cn_signatures.utils import CALC_NEW, create_chrom_type_pos_indices
-from cn_signatures.length_scales import DEFAULT_SEGMENT_SIZE_DICT
-from cn_signatures.data_loaders import format_chromosomes, load_segmentation
+from spice import data_loaders
+from spice.utils import CALC_NEW, create_chrom_type_pos_indices
+from spice.length_scales import DEFAULT_SEGMENT_SIZE_DICT
+from spice.data_loaders import format_chromosomes, load_segmentation
 from spice.event_analysis.final_events import classify_event_position
 
 CHROMS = ['chr' + str(x) for x in range(1, 23)] + ['chrX', 'chrY']
 CHROM_LENS = data_loaders.load_chrom_lengths()
-
-@CALC_NEW()
-def calc_dat_segmentation(dat, breakpoint_dict, show_progress=False, cn_columns=['cn_a', 'cn_b']):
-    # import here because the Cython code isn't always compiled
-    from cn_signatures.cn_signatures_c.consistent_segmentation_cython import consistent_segmentation
-
-    dat_segmentation = []
-    for chrom in tqdm(CHROMS, disable=not show_progress):
-
-        cur_dat = dat.query('chrom == @chrom', engine='python')
-        if len(cur_dat) == 0:
-            continue
-        breakpoints = np.sort(np.unique(np.concatenate([cur_dat.eval('start').values,
-                                                        cur_dat.eval('end + 1').values])))
-        cur_breakpoints = {chrom: np.sort(np.unique(np.append(breakpoints, breakpoint_dict[chrom])))}
-
-        chrom_dat_consistent = []
-        for allele in cn_columns:
-            cur_dat_consistent = consistent_segmentation(
-                cur_dat[[allele]], column=allele, chrom_col='chrom', breakpoint_dict=cur_breakpoints,
-                cython=True, skip_assertions=True, postprocessing=False, show_progress=False)
-
-            cur_dat_consistent = cur_dat_consistent.loc[cur_dat_consistent.eval('end>start')]
-            cur_dat_consistent = cur_dat_consistent.astype(float) * cur_dat_consistent.eval('end - start').values[:, None]
-            cur_dat_consistent['bin'] = pd.cut(cur_dat_consistent.reset_index()['start']+1, bins=breakpoint_dict[chrom]).values
-            cur_dat_consistent = cur_dat_consistent.reset_index().set_index(['chrom', 'bin']).drop(['start', 'end'], axis=1, level=0).groupby(['chrom', 'bin'], observed=False).sum().reset_index()
-            cur_dat_consistent['start'] = cur_dat_consistent['bin'].apply(lambda x: x.left).astype(int)
-            cur_dat_consistent['end'] = cur_dat_consistent['bin'].apply(lambda x: x.right).astype(int)
-            cur_dat_consistent = cur_dat_consistent.set_index(['chrom', 'start', 'end']).drop('bin', axis=1, level=0)
-            cur_dat_consistent = cur_dat_consistent.astype(float) / cur_dat_consistent.eval('end-1 - start').values[:, None]
-
-            chrom_dat_consistent.append(cur_dat_consistent)
-        chrom_dat_consistent = pd.concat(chrom_dat_consistent, axis=1)
-        dat_segmentation.append(chrom_dat_consistent)
-    dat_segmentation = pd.concat(dat_segmentation, axis=0)
-
-    dat_segmentation = dat_segmentation.stack('sample_id', future_stack=True).reset_index()
-    dat_segmentation['chrom'] = format_chromosomes(dat_segmentation['chrom'])
-    dat_segmentation = dat_segmentation.set_index(['sample_id', 'chrom', 'start', 'end']).sort_index()
-
-    return dat_segmentation
 
 
 def create_segmentation(size):
