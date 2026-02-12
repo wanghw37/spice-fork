@@ -251,25 +251,7 @@ We usually recommend to only use multiple cores for the `large_chroms` pipeline 
 
 Note that parallel processing will disable logging for the different subprocesses.
 
-### 3.6 Run Specific Pipeline Steps
-
-The SPICE event reconstruction has 6 sub-steps. To run specific steps, use the `--steps` flag:
-
-```bash
-# Run only input splitting
-spice split --config <path/to/config>
-
-# Run path enumeration and kNN selection
-spice all_solutions disambiguate --config <path/to/config>
-
-# Run MCMC sampling for large chromosomes
-spice large_chroms --config <path/to/config>
-
-# Run from a step onward (using + syntax)
-spice --config <path/to/config> --steps split+
-```
-
-### 3.7 Snakemake Execution
+### 3.6 Snakemake Execution
 
 For parallel execution on computing clusters, use the Snakemake workflow.
 
@@ -278,17 +260,12 @@ For parallel execution on computing clusters, use the Snakemake workflow.
 conda install bioconda::snakemake
 ```
 
-```bash
-# Local execution
-spice --config <path/to/config> --snakemake --snakemake-mode local --snakemake-cores 1
+**Coming soon, not fully implemented yet**
 
-# Slurm execution
-spice --config <path/to/config> --snakemake --snakemake-mode slurm --snakemake-jobs 250
-```
 
 **Note:** If you get a `LockException` run `spice --config configs/events_example.yaml --unlock` to remove the lock.
 
-### 3.8 Logging Output
+### 3.7 Logging Output
 
 Control where logging output is sent with the `--log` flag:
 
@@ -402,13 +379,12 @@ For interactive exploration, see `notebooks/loci_plotting.ipynb`.
 
 You can also import and use SPICE functions directly in Python. Note that it is important to run `spice.load_config(config_file)` before any other spice imports
 ```python
+config_file = 'configs/events_example.yaml'
 import spice
-spice.load_config(config_file)
-from spice.pipeline import full_paths_from_graph_with_sv_wrapper
-from spice.knn_graph import solve_with_knn
-from spice.mcmc_for_large_chroms import mcmc_event_selection
+spice.load_config(config_file);
 ```
 
+See also the example notebooks for how to use the API.
 
 ## 8. Citation
 

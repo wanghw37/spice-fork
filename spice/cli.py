@@ -9,6 +9,7 @@ import re
 
 # Import base package only; defer submodule imports until after config is loaded
 import spice
+from spice.utils import save_pickle
 
 
 def get_version():
@@ -668,12 +669,12 @@ def main_loci_detection(args):
     # Combine results from all chromosomes
     logger.info('Combining all loci detection results across chromosomes')
     from spice.main_loci_functions import combine_loci
-    final_loci_df = combine_loci(
+    final_loci_df, filtered_selection_points, filtered_loci_widths = combine_loci(
         loci_results_dir=loci_results_dir,
         processed_events=processed_events,
         calculate_p_value=loci_params['calculate_p_value'],
         p_values_N_random=loci_params['p_values_N_random'],
-        p_values_iterations=loci_params['p_values_iterations'],
+        p_values_N_iterations=loci_params['p_values_N_iterations'],
         post_p_value_N_iterations=loci_params['post_p_value_N_iterations'],
         p_value_threshold=loci_params['p_value_threshold'],
         overwrite=args.overwrite,
@@ -684,6 +685,8 @@ def main_loci_detection(args):
     final_loci_output_path = os.path.join(config['directories']['results_dir'], config['name'], 'final_loci_detection.tsv')
     final_loci_df.to_csv(final_loci_output_path, sep='\t', index=True)
     logger.info(f'Saved final combined loci detection results to {final_loci_output_path}')
+    save_pickle(filtered_selection_points, os.path.join(config['directories']['results_dir'], config['name'], 'loci_of_selection', 'detection', 'final_loci_detection_filtered.pickle'))
+    save_pickle(filtered_loci_widths, os.path.join(config['directories']['results_dir'], config['name'], 'loci_of_selection', 'detection', 'final_loci_detection_filtered_widths.pickle'))
 
     logger.info('Loci detection pipeline completed.')
 
@@ -746,7 +749,7 @@ def main_loci_assignment(args):
         within_ci_N_iterations=loci_params['loci_assignment_within_ci_N_iterations'],
         N_iterations_optim=loci_params['loci_assignment_N_iterations'],
         p_values_N_random=loci_params['p_values_N_random'],
-        p_values_iterations=loci_params['p_values_iterations'],
+        p_values_N_iterations=loci_params['p_values_N_iterations'],
         post_p_value_N_iterations=loci_params['post_p_value_N_iterations'],
         overwrite=args.overwrite,
         overwrite_preprocessing=(loci_params['overwrite_preprocessing'] and args.overwrite),

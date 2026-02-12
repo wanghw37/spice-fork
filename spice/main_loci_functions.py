@@ -536,7 +536,7 @@ def combine_loci(
     loci_results_dir: str,
     processed_events: Optional[pd.DataFrame] = None,
     p_values_N_random: int = 10_000,
-    p_values_iterations: int = 1_000,
+    p_values_N_iterations: int = 1_000,
     post_p_value_N_iterations: int = 25_000,
     calculate_p_value: bool = False,
     p_value_threshold: float = 0.05,
@@ -617,7 +617,7 @@ def combine_loci(
             loci_df=None,
             output_dir=loci_results_dir,
             N_random=p_values_N_random,
-            p_values_iterations=p_values_iterations,
+            p_values_N_iterations=p_values_N_iterations,
             post_p_value_N_iterations=post_p_value_N_iterations,
             final_events_df=processed_events,
             p_value_threshold=p_value_threshold,
@@ -641,7 +641,7 @@ def combine_loci(
     )
     
     log_debug(logger, f'Final loci dataframe: {len(loci_df)} loci across {loci_df["chrom"].nunique()} chromosomes')   
-    return loci_df
+    return loci_df, filtered_selection_points, filtered_loci_widths
 
 
 def process_final_events_for_loci_routines(
@@ -966,7 +966,7 @@ def loci_assignment(
     within_ci_N_iterations: int = 10_000,
     N_iterations_optim: int = 11_000,
     p_values_N_random: int = 10_000,
-    p_values_iterations: int = 1_000,
+    p_values_N_iterations: int = 1_000,
     post_p_value_N_iterations: int = 25_000,
     overwrite: bool = False,
     overwrite_preprocessing: bool = False
@@ -1069,11 +1069,11 @@ def loci_assignment(
 
     # Combine results
     logger.info('Combining per-chromosome results')
-    final_loci_df = combine_loci(
+    final_loci_df, filtered_selection_points, filtered_loci_widths = combine_loci(
         loci_results_dir=loci_results_dir,
         processed_events=processed_events,
         p_values_N_random=p_values_N_random,
-        p_values_iterations=p_values_iterations,
+        p_values_N_iterations=p_values_N_iterations,
         post_p_value_N_iterations=post_p_value_N_iterations,
         calculate_p_value=False,
         overwrite=overwrite,
@@ -1127,7 +1127,7 @@ def full_filter_by_p_values(
     loci_df=None,
     p_value_threshold=0.05,
     N_random=10_000,
-    p_values_iterations=1_000,
+    p_values_N_iterations=1_000,
     post_p_value_N_iterations=25_000,
     final_events_df=None,
     overwrite=False,
@@ -1145,7 +1145,7 @@ def full_filter_by_p_values(
     loci_df = assign_p_values(
         loci_df,
         N_random=N_random,
-        n_iterations_optim=p_values_iterations,
+        n_iterations_optim=p_values_N_iterations,
         output_dir=output_dir,
         data_per_length_scale=all_data_per_length_scale,
         overwrite=overwrite,
@@ -1170,6 +1170,10 @@ def full_filter_by_p_values(
         f'Length mismatch between final_p_values ({len(final_p_values)}) and filtered loci '
         f'({sum(len(x) for x in filtered_loci_widths.values())})'
     )
+    if len(loci_df) == 0:
+        logger.warning('No loci passed the p-value filtering!')
+        return filtered_selection_points, filtered_loci_widths, final_p_values
+
     
     logger.info('Optimizing selection points after p-value filtering')
     for cur_chrom in loci_df['chrom'].unique():

@@ -47,7 +47,7 @@ params:
 loci_detection:
   # De-novo loci detection parameters
   loci_steps: 'fast' # Steps to run: 'default', 'fast', combine, single step, or space-separated steps
-  N_loci: 25 # Number of loci to detect
+  N_loci: 100 # Number of loci to detect
   skip_up_down: False # Skip up/down assignment
   use_original_rank: False # Use original rank from detection instead of re-ranking
   N_bootstrap: 10 # Number of bootstrap samples for signal bootstrap
@@ -55,28 +55,28 @@ loci_detection:
   overwrite_preprocessing: False # Force recalculation of preprocessing caches (bootstrap signals, data_per_length_scale)
   detection_blocked_distance_th: 5000000 # Blocked distance threshold (in bp)
   # N_iterations parameters for pipeline steps
-  detection_N_iterations_base: 300 # Base number of iterations for detection
-  detection_max_N_iterations: 2000 # Maximum iterations for detection
-  detection_final_N_iterations: 2500 # Final iterations for detection
-  ranking_N_iterations: 50 # Number of iterations for ranking loci
-  flipping_N_iterations: 1100 # Number of iterations for flipping
-  flipping_N_iterations_single: 100 # Number of iterations for single flips
-  limiting_N_iterations_optim: 1000 # Number of iterations for limiting optimization
-  optimizing_N_iterations_optimization: 1100 # Number of iterations for optimization
-  infer_widths_N_iterations: 100 # Number of optimization iterations for widths
-  merge_N_iterations_optim: 1000 # Number of iterations for merge optimization
-  within_ci_N_iterations: 1000 # Number of iterations for within ci filtering
-  filter_N_iterations_optim: 1000 # Number of iterations for filter optimization
-  final_limiting_N_iterations_optim: 1000 # Number of iterations for final limiting optimization
+  detection_N_iterations_base: 30 # Base number of iterations for detection
+  detection_max_N_iterations: 200 # Maximum iterations for detection
+  detection_final_N_iterations: 250 # Final iterations for detection
+  ranking_N_iterations: 5 # Number of iterations for ranking loci
+  flipping_N_iterations: 110 # Number of iterations for flipping
+  flipping_N_iterations_single: 10 # Number of iterations for single flips
+  limiting_N_iterations_optim: 100 # Number of iterations for limiting optimization
+  optimizing_N_iterations_optimization: 110 # Number of iterations for optimization
+  infer_widths_N_iterations: 10 # Number of optimization iterations for widths
+  merge_N_iterations_optim: 100 # Number of iterations for merge optimization
+  within_ci_N_iterations: 100 # Number of iterations for within ci filtering
+  filter_N_iterations_optim: 100 # Number of iterations for filter optimization
+  final_limiting_N_iterations_optim: 100 # Number of iterations for final limiting optimization
   N_bootstrap_for_widths: 10 # How many bootstrap iterations are used for inferring locus widths (needs to be <= N_bootstrap)
   th_locus_prominence: 1 # Threshold for locus prominence filtering
   # Loci assignment
-  loci_assignment_N_iterations: 2500 # Number of iterations for loci assignment optimization
-  loci_assignment_within_ci_N_iterations: 1000 # Number of iterations for within ci filtering
+  loci_assignment_N_iterations: 250 # Number of iterations for loci assignment optimization
+  loci_assignment_within_ci_N_iterations: 100 # Number of iterations for within ci filtering
   # Loci combination and scoring parameters
-  p_values_N_random: 100 # Number of random samples for p-value calculation
-  p_values_iterations: 100 # Number of optimization iterations for p-value calculations
-  post_p_value_N_iterations: 2500 # Number of optimization iterations after p-value filtering
+  p_values_N_random: 1000 # Number of random samples for p-value calculation
+  p_values_N_iterations: 100 # Number of optimization iterations for p-value calculations
+  post_p_value_N_iterations: 250 # Number of optimization iterations after p-value filtering
   calculate_p_value: True # Whether to calculate p-values from scratch (if False, load from cache)
   p_value_threshold: 0.05 # Threshold for significant p-values
   # Event preprocessing parameters
