@@ -29,7 +29,7 @@ except Exception:
     snakefile_dir = Path(os.getcwd())
 
 BASE_DIR = snakefile_dir
-DEFAULT_CONFIG_FILE = BASE_DIR / "default_config.yaml"
+DEFAULT_CONFIG_FILE = BASE_DIR / "spice" / "default_config.yaml"
 
 
 def update_nested_dict(orig_dict, updated_values):

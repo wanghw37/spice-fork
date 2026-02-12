@@ -99,8 +99,8 @@ def _prepare_split_inputs(name, keep_old=False, selected_ids=None):
     data.to_csv(copynumber_file.replace('.tsv', '_split.tsv'), sep='\t', index=False)
 
     base_dir = os.path.dirname(__file__)
-    lookup_table_single_solution = open_pickle(os.path.join(base_dir, '..', '..', 'objects', 'lookup_table_single_solution_full_paths.pickle'))
-    lookup_table_multiple_solutions = open_pickle(os.path.join(base_dir, '..', '..', 'objects', 'lookup_table_multiple_solutions_full_paths.pickle'))
+    lookup_table_single_solution = open_pickle(os.path.join(base_dir, '..', 'objects', 'lookup_table_single_solution_full_paths.pickle'))
+    lookup_table_multiple_solutions = open_pickle(os.path.join(base_dir, '..', 'objects', 'lookup_table_multiple_solutions_full_paths.pickle'))
 
     if not keep_old:
         log_debug(logger, 'Deleting old files')

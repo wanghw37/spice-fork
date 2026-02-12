@@ -97,7 +97,7 @@ def load_centromeres(extended=True, observed=False, pad=None):
     '''Create file using create_observed_centromeres_and_telomeres'''
 
     assert not (extended and observed), 'Cannot have both extended and observed centromeres'
-    centromeres = pd.read_csv(os.path.join(Path(__file__).parent.parent, 'objects', 'centromeres_ext.tsv' if extended else ('centromeres_observed.tsv' if observed else 'centromeres.tsv')), sep='\t',  header=[0, 1] if observed else [0], index_col=0)
+    centromeres = pd.read_csv(os.path.join(Path(__file__).parent, 'objects', 'centromeres_ext.tsv' if extended else ('centromeres_observed.tsv' if observed else 'centromeres.tsv')), sep='\t',  header=[0, 1] if observed else [0], index_col=0)
 
     if pad is not None:
         centromeres['centro_start'] = np.maximum(centromeres['centro_start'] - pad, 0)
@@ -107,7 +107,7 @@ def load_centromeres(extended=True, observed=False, pad=None):
 
 def load_telomeres_observed():
     '''Create file using create_observed_centromeres_and_telomeres'''
-    telomeres_observed = pd.read_csv(os.path.join(Path(__file__).parent.parent, 'objects', 'telomeres_observed.tsv'), sep='\t',  header=[0, 1], index_col=0)
+    telomeres_observed = pd.read_csv(os.path.join(Path(__file__).parent, 'objects', 'telomeres_observed.tsv'), sep='\t',  header=[0, 1], index_col=0)
 
     return telomeres_observed
 
@@ -143,8 +143,8 @@ def create_observed_centromeres_and_telomeres(final_events_df, segment_size_dict
             actual_telomere_pos.loc[cur_chrom, (cur_length_scale, 'chrom_start')] = cur_events['start'].min()
             actual_telomere_pos.loc[cur_chrom, (cur_length_scale, 'chrom_end')] = cur_events['end'].max()
 
-    actual_telomere_pos.to_csv('/Users/tom/phd/projects/signatures/spice/objects/telomeres_observed.tsv', sep='\t')
-    actual_centro_pos.to_csv('/Users/tom/phd/projects/signatures/spice/objects/centromeres_observed.tsv', sep='\t')
+    actual_telomere_pos.to_csv(os.path.join(Path(__file__).parent, 'objects', 'telomeres_observed.tsv'), sep='\t')
+    actual_centro_pos.to_csv(os.path.join(Path(__file__).parent, 'objects', 'centromeres_observed.tsv'), sep='\t')
 
 
 def load_chrom_lengths():

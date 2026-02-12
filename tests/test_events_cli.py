@@ -35,7 +35,7 @@ def temp_workspace():
             'name': 'test_run',
             'input_files': {
                 'copynumber': os.path.join(data_dir, 'example_data.tsv'),
-                'knn_train': os.path.join(repo_root, 'objects', 'train_events_sv_and_unamb.pickle')
+                'knn_train': os.path.join(repo_root, 'spice', 'objects', 'train_events_sv_and_unamb.pickle')
             },
             'directories': {
                 'results_dir': results_dir,

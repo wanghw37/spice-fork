@@ -40,7 +40,7 @@ def load_config(config_path: Optional[str] = None, assert_exists: bool = True):
         set_config(config_path)
 
     # Always load the default first
-    default_path = os.path.join(Path(__file__).parent.parent, 'default_config.yaml')
+    default_path = os.path.join(Path(__file__).parent, 'default_config.yaml')
     default_config = _read_yaml(default_path)
 
     # Determine user config source

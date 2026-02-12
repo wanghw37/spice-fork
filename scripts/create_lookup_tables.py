@@ -153,7 +153,7 @@ def main():
     # Determine output directory
     if args.output_dir is None:
         script_dir = os.path.dirname(__file__)
-        lookup_dir = os.path.join(script_dir, '..', 'objects')
+        lookup_dir = os.path.join(script_dir, '..', 'spice', 'objects')
     else:
         lookup_dir = args.output_dir
     os.makedirs(lookup_dir, exist_ok=True)

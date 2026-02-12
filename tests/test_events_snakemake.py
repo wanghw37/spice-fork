@@ -144,7 +144,7 @@ def test_snakemake_matches_cli_example(repo_root_dir, example_data_exists, knn_t
         base_config = {
             "input_files": {
                 "copynumber": os.path.join(data_dir, "example_data.tsv"),
-                "knn_train": os.path.join(repo_root, "objects", "train_events_sv_and_unamb.pickle"),
+                "knn_train": os.path.join(repo_root, "spice", "objects", "train_events_sv_and_unamb.pickle"),
             },
             "directories": {
                 "data_dir": data_dir,

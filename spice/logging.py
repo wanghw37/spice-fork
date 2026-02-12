@@ -91,10 +91,11 @@ def get_logger(name, spice_prefix=True, load_config=True, config_file=None):
     # Determine logging level
     if load_config:
         if config_file is None:
-            if os.path.exists('../config.yaml'):
-                config_file = '../config.yaml'
-            elif os.path.exists('../default_config.yaml'):
-                config_file = '../default_config.yaml'
+            spice_dir = os.path.dirname(__file__)
+            if os.path.exists(os.path.join(spice_dir, '..', 'config.yaml')):
+                config_file = os.path.join(spice_dir, '..', 'config.yaml')
+            elif os.path.exists(os.path.join(spice_dir, 'default_config.yaml')):
+                config_file = os.path.join(spice_dir, 'default_config.yaml')
 
     if _LOGGING_CONFIG['configured'] and _LOGGING_CONFIG.get('level'):
         logging_level = _LOGGING_CONFIG['level']

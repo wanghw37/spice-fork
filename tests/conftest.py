@@ -36,5 +36,5 @@ def example_data_exists(repo_root_dir):
 @pytest.fixture(scope="session")
 def knn_train_data_exists(repo_root_dir):
     """Check if KNN training data exists."""
-    knn_data = os.path.join(repo_root_dir, 'objects', 'train_events_sv_and_unamb.pickle')
+    knn_data = os.path.join(repo_root_dir, 'spice', 'objects', 'train_events_sv_and_unamb.pickle')
     return os.path.exists(knn_data)

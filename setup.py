@@ -1,11 +1,19 @@
 from setuptools import setup, find_packages
+from pathlib import Path
 
 setup(
-    name='spice',
+    name='spice-test',
     version='0.1',
     author='Tom L Kaufmann',
     description='SPICE: Selection Patterns In somatic Copy-number Events',
+    author_email='tkau93@gmail.com, marina.55kovic@gmail.com, roland.f.schwarz@gmail.com',
+    long_description=(Path(__file__).parent / "README.md").read_text(),
+    long_description_content_type='text/markdown',
+    url='https://bitbucket.org/schwarzlab/spice',
     packages=find_packages(),
+    package_data={
+        'spice': ['*.yaml', 'objects/**/*.tsv', 'objects/**/*.pickle'],
+    },
     zip_safe=False,
     entry_points={
         'console_scripts': [
