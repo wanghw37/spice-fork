@@ -1,10 +1,21 @@
 import os
+import sys
+import pickle
 from joblib import Parallel, delayed
 
 import pandas as pd
 import fstlib
 
 from spice.utils import save_pickle, open_pickle
+
+# Use importlib.resources for accessing package data (works with installed packages)
+if sys.version_info >= (3, 9):
+    from importlib.resources import files
+else:
+    try:
+        from importlib_resources import files
+    except ImportError:
+        files = None
 from spice.logging import log_debug, get_logger
 from spice.data_loaders import resolve_copynumber_file, load_raw_copy_number_data
 from spice.event_inference.fst_assets import nowgd_fst, get_diploid_fsa, T_forced_WGD
@@ -98,9 +109,17 @@ def _prepare_split_inputs(name, keep_old=False, selected_ids=None):
     log_debug(logger, f'Saving split input TSV to {copynumber_file.replace(".tsv", "_split.tsv")}')
     data.to_csv(copynumber_file.replace('.tsv', '_split.tsv'), sep='\t', index=False)
 
-    base_dir = os.path.dirname(__file__)
-    lookup_table_single_solution = open_pickle(os.path.join(base_dir, '..', 'objects', 'lookup_table_single_solution_full_paths.pickle'))
-    lookup_table_multiple_solutions = open_pickle(os.path.join(base_dir, '..', 'objects', 'lookup_table_multiple_solutions_full_paths.pickle'))
+    # Load lookup tables from package resources
+    if files is None:
+        raise FileNotFoundError("importlib.resources unavailable for lookup tables")
+    try:
+        single_content = files('spice').joinpath('objects', 'lookup_table_single_solution_full_paths.pickle').read_bytes()
+        lookup_table_single_solution = pickle.loads(single_content)
+        
+        multiple_content = files('spice').joinpath('objects', 'lookup_table_multiple_solutions_full_paths.pickle').read_bytes()
+        lookup_table_multiple_solutions = pickle.loads(multiple_content)
+    except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+        raise FileNotFoundError("Could not find lookup tables in spice/objects/") from exc
 
     if not keep_old:
         log_debug(logger, 'Deleting old files')
