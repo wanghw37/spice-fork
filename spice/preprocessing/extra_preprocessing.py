@@ -17,8 +17,7 @@ from medicc.core import create_standard_fsa_dict_from_data
 from spice import config, directories, data_loaders
 from spice.logging import log_debug, get_logger
 from spice.preprocessing.preprocessing import (
-    fill_gaps_cnsistent_wrapper, merge_neighbours_mod, infer_wgd_status,
-    fill_telomere_nans, get_breaks_mod, main_aggregate_quiet
+    fill_gaps_cnsistent_wrapper, merge_neighbours_mod, fill_telomere_nans, get_breaks_mod, main_aggregate_quiet
 )
 from spice.preprocessing.preprocessing import get_or_infer_wgd_status, get_or_infer_xy_status
 from spice.event_inference.fst_assets import nowgd_fst, get_diploid_fsa, T_forced_WGD, SYMBOL_TABLE

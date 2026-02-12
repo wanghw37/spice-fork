@@ -89,18 +89,25 @@ def get_logger(name, spice_prefix=True, load_config=True, config_file=None):
     global _LOGGING_CONFIG
 
     # Determine logging level
-    if load_config:
-        if config_file is None:
-            spice_dir = os.path.dirname(__file__)
-            if os.path.exists(os.path.join(spice_dir, '..', 'config.yaml')):
-                config_file = os.path.join(spice_dir, '..', 'config.yaml')
-            elif os.path.exists(os.path.join(spice_dir, 'default_config.yaml')):
-                config_file = os.path.join(spice_dir, 'default_config.yaml')
+    if load_config and config_file is None:
+        # For installed packages, try to access via importlib.resources
+        try:
+            import sys
+            if sys.version_info >= (3, 9):
+                from importlib.resources import files
+            else:
+                from importlib_resources import files
+            default_cfg_content = files('spice').joinpath('objects', 'default_config.yaml').read_text()
+            config = yaml.safe_load(default_cfg_content)
+            logging_level = config['params']['logging_level']
+        except (ImportError, AttributeError, TypeError, FileNotFoundError, KeyError):
+            pass
 
     if _LOGGING_CONFIG['configured'] and _LOGGING_CONFIG.get('level'):
         logging_level = _LOGGING_CONFIG['level']
     else:
         if config_file is not None:
+            # config_file should now always be a string path
             with open(config_file, 'rt') as f:
                 config = yaml.safe_load(f.read())
             logging_level = config['params']['logging_level']

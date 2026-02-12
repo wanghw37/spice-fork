@@ -1,6 +1,8 @@
 import os
 import re
 from pathlib import Path
+from io import StringIO
+import sys
 
 import pandas as pd
 import numpy as np
@@ -9,6 +11,15 @@ from tqdm.auto import tqdm
 from spice import config, directories
 from spice.length_scales import DEFAULT_SEGMENT_SIZE_DICT, DEFAULT_LENGTH_SCALE_BOUNDARIES
 from spice.utils import (CALC_NEW, open_pickle, save_pickle)
+
+# Use importlib.resources for accessing package data (works with installed packages)
+if sys.version_info >= (3, 9):
+    from importlib.resources import files
+else:
+    try:
+        from importlib_resources import files
+    except ImportError:
+        files = None
 from spice.logging import log_debug, get_logger
 
 
@@ -97,7 +108,21 @@ def load_centromeres(extended=True, observed=False, pad=None):
     '''Create file using create_observed_centromeres_and_telomeres'''
 
     assert not (extended and observed), 'Cannot have both extended and observed centromeres'
-    centromeres = pd.read_csv(os.path.join(Path(__file__).parent, 'objects', 'centromeres_ext.tsv' if extended else ('centromeres_observed.tsv' if observed else 'centromeres.tsv')), sep='\t',  header=[0, 1] if observed else [0], index_col=0)
+    if files is None:
+        raise FileNotFoundError("importlib.resources unavailable for centromeres data")
+    filename = 'centromeres_ext.tsv' if extended else (
+        'centromeres_observed.tsv' if observed else 'centromeres.tsv'
+    )
+    try:
+        content = files('spice').joinpath('objects', filename).read_text()
+    except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+        raise FileNotFoundError(f"Could not find {filename} in spice/objects/") from exc
+    centromeres = pd.read_csv(
+        StringIO(content),
+        sep='\t',
+        header=[0, 1] if observed else [0],
+        index_col=0,
+    )
 
     if pad is not None:
         centromeres['centro_start'] = np.maximum(centromeres['centro_start'] - pad, 0)
@@ -107,7 +132,18 @@ def load_centromeres(extended=True, observed=False, pad=None):
 
 def load_telomeres_observed():
     '''Create file using create_observed_centromeres_and_telomeres'''
-    telomeres_observed = pd.read_csv(os.path.join(Path(__file__).parent, 'objects', 'telomeres_observed.tsv'), sep='\t',  header=[0, 1], index_col=0)
+    if files is None:
+        raise FileNotFoundError("importlib.resources unavailable for telomeres_observed.tsv")
+    try:
+        content = files('spice').joinpath('objects', 'telomeres_observed.tsv').read_text()
+    except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+        raise FileNotFoundError("Could not find telomeres_observed.tsv in spice/objects/") from exc
+    telomeres_observed = pd.read_csv(
+        StringIO(content),
+        sep='\t',
+        header=[0, 1],
+        index_col=0,
+    )
 
     return telomeres_observed
 
@@ -143,12 +179,20 @@ def create_observed_centromeres_and_telomeres(final_events_df, segment_size_dict
             actual_telomere_pos.loc[cur_chrom, (cur_length_scale, 'chrom_start')] = cur_events['start'].min()
             actual_telomere_pos.loc[cur_chrom, (cur_length_scale, 'chrom_end')] = cur_events['end'].max()
 
-    actual_telomere_pos.to_csv(os.path.join(Path(__file__).parent, 'objects', 'telomeres_observed.tsv'), sep='\t')
-    actual_centro_pos.to_csv(os.path.join(Path(__file__).parent, 'objects', 'centromeres_observed.tsv'), sep='\t')
+    output_dir = os.path.join(directories['results_dir'], 'data_loaders')
+    os.makedirs(output_dir, exist_ok=True)
+    actual_telomere_pos.to_csv(os.path.join(output_dir, 'telomeres_observed.tsv'), sep='\t')
+    actual_centro_pos.to_csv(os.path.join(output_dir, 'centromeres_observed.tsv'), sep='\t')
 
 
 def load_chrom_lengths():
-    chrom_lengths = pd.read_csv(os.path.join(directories['base_dir'], config['input_files']['chrom_lengths']), sep='\t').set_index('chrom')['chrom_length']
+    if files is None:
+        raise FileNotFoundError("importlib.resources unavailable for chrom_lengths.tsv")
+    try:
+        content = files('spice').joinpath('objects', 'chrom_lengths.tsv').read_text()
+    except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+        raise FileNotFoundError("Could not find chrom_lengths.tsv in spice/objects/") from exc
+    chrom_lengths = pd.read_csv(StringIO(content), sep='\t').set_index('chrom')['chrom_length']
     return chrom_lengths
 
 

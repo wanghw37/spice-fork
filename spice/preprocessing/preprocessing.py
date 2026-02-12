@@ -5,7 +5,6 @@ import os
 import contextlib
 
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from spice import data_loaders, config, directories
@@ -187,6 +186,7 @@ def infer_wgd_status(data, results_dir=None, plot=False, method='major_cn', tota
         wgd_status = major_minor_cn['wgd']
 
         if plot:
+            import seaborn as sns
             assert results_dir is not None, 'results_dir needs to be provided if plot=True'
             major_minor_cn['mean_major_minus_minor_cn'] = major_minor_cn['major_minus_minor_cn_weighted'] / major_minor_cn['width']
             plt.figure(figsize=(8, 8))
@@ -212,6 +212,7 @@ def infer_wgd_status(data, results_dir=None, plot=False, method='major_cn', tota
         ploidy_loh_fraction['wgd'] = ploidy_loh_fraction.eval('(2.9 - 2 * loh_fraction) < ploidy')
 
         if plot and results_dir is not None:
+            import seaborn as sns
             plt.figure(figsize=(8, 8))
             sns.scatterplot(data=ploidy_loh_fraction, x='loh_fraction', y='ploidy', hue='wgd')
             linex = np.linspace(loh_fraction.min(), loh_fraction.max())
@@ -251,7 +252,7 @@ def get_or_infer_wgd_status(data, total_cn=False):
         wgd_status = infer_wgd_status(
             data,
             results_dir=directories['results_dir'],
-            plot=True,
+            plot=False,
             method=config['params'].get('wgd_inference_method', 'major_cn'),
             total_cn=total_cn,
         )

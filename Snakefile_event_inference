@@ -14,6 +14,10 @@ import yaml
 import collections.abc
 from pathlib import Path
 from glob import glob
+try:
+    from importlib.resources import files
+except ImportError:
+    from importlib_resources import files
 
 # -----------------------------
 # Config loading (no spice imports)
@@ -29,7 +33,6 @@ except Exception:
     snakefile_dir = Path(os.getcwd())
 
 BASE_DIR = snakefile_dir
-DEFAULT_CONFIG_FILE = BASE_DIR / "spice" / "default_config.yaml"
 
 
 def update_nested_dict(orig_dict, updated_values):
@@ -48,10 +51,19 @@ def read_yaml(path):
         return yaml.safe_load(f.read())
 
 
+def read_default_config():
+    try:
+        return yaml.safe_load(
+            files("spice").joinpath("objects", "default_config.yaml").read_text()
+        ) or {}
+    except Exception as exc:
+        raise FileNotFoundError("Could not load default_config.yaml from package resources") from exc
+
+
 snakemake_cfg = dict(config) if "config" in globals() else {}
 config_path = os.environ.get("SPICE_CONFIG") or snakemake_cfg.pop("config_path", None)
 selected_ids_raw = snakemake_cfg.pop("selected_ids", None)
-skip_preprocessing = bool(snakemake_cfg.pop("skip_preprocessing", False))
+run_preprocessing = bool(snakemake_cfg.pop("run_preprocessing", False))
 
 if config_path is not None:
     if not os.path.exists(config_path):
@@ -63,44 +75,45 @@ elif snakemake_cfg:
 else:
     user_cfg = {}
 
-if not DEFAULT_CONFIG_FILE.exists():
-    raise FileNotFoundError(f"Default config not found at {DEFAULT_CONFIG_FILE}")
-
-base_cfg = read_yaml(DEFAULT_CONFIG_FILE) or {}
+base_cfg = read_default_config()
 config_merged = update_nested_dict(base_cfg, user_cfg)
-if not skip_preprocessing:
-    skip_preprocessing = bool(config_merged.get("params", {}).get("skip_preprocessing", False))
+if not run_preprocessing:
+    run_preprocessing = bool(config_merged.get("params", {}).get("run_preprocessing", False))
+
+name = config_merged.get("name")
+if not name:
+    raise ValueError("Config file must specify a 'name' field.")
 
 # Normalize directories (similar to spice.load_config)
 directories = config_merged.get("directories", {})
+base_dir = directories.get("base_dir")
+if not base_dir:
+    raise ValueError("Config file must specify 'directories.base_dir'.")
 
+base_dir_path = Path(base_dir).expanduser().resolve()
 fallback_dirs = {
-    "data_dir": BASE_DIR / "data",
-    "results_dir": BASE_DIR / "results",
-    "log_dir": BASE_DIR / "logs",
-    "plot_dir": BASE_DIR / "plots",
-    "tmp_dir": BASE_DIR / "tmp",
+    "data_dir": base_dir_path / "data",
+    "results_dir": base_dir_path / "results",
+    "log_dir": base_dir_path / "logs",
+    "plot_dir": base_dir_path / "plots",
+    "tmp_dir": base_dir_path / "tmp",
 }
 
-directories["base_dir"] = str(BASE_DIR)
+directories["base_dir"] = str(base_dir_path)
 for key, fallback in fallback_dirs.items():
     if not directories.get(key):
         directories[key] = str(fallback)
 
 for dkey, dval in list(directories.items()):
     if isinstance(dval, str) and dval and not os.path.isabs(dval):
-        directories[dkey] = str((BASE_DIR / dval).resolve())
+        directories[dkey] = str((base_dir_path / dval).resolve())
 
 config_merged["directories"] = directories
 
 if "input_files" in config_merged and "knn_train" in config_merged["input_files"]:
     knn_path = config_merged["input_files"]["knn_train"]
     if knn_path and not os.path.isabs(knn_path):
-        config_merged["input_files"]["knn_train"] = str((BASE_DIR / knn_path).resolve())
-
-name = config_merged.get("name")
-if not name:
-    raise ValueError("Config file must specify a 'name' field.")
+        config_merged["input_files"]["knn_train"] = str((base_dir_path / knn_path).resolve())
 
 results_dir = os.path.join(directories["results_dir"], name)
 log_dir = directories["log_dir"]
@@ -252,8 +265,8 @@ rule preprocessing:
     shell:
         r"""
         set -euo pipefail;
-        if [ "{skip_preprocessing}" = "True" ]; then
-            echo "Skipping preprocessing (skip_preprocessing=True)" >> {log};
+        if [ "{run_preprocessing}" != "True" ]; then
+            echo "Skipping preprocessing (run_preprocessing=False)" >> {log};
             touch {output};
         else
             export SPICE_CONFIG="{spice_config_path}";

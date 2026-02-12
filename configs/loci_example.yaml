@@ -1,6 +1,10 @@
 name: 'loci_example'
+
 input_files:
   final_events: 'data/pcawg_final_events_chr1_chr2.tsv'
+
+directories:
+  base_dir: '.'
 
 loci_detection:
   N_loci: 100

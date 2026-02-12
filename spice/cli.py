@@ -13,13 +13,21 @@ from spice.utils import save_pickle
 
 
 def get_version():
-    """Extract version from setup.py."""
-    setup_path = os.path.join(os.path.dirname(__file__), '..', 'setup.py')
-    with open(setup_path, 'r') as f:
-        content = f.read()
-    match = re.search(r"version\s*=\s*['\"]([^'\"]+)['\"]", content)
-    if match:
-        return match.group(1)
+    """Get installed package version, with setup.py fallback for editable installs."""
+    try:
+        from importlib.metadata import version
+    except ImportError:
+        try:
+            from importlib_metadata import version
+        except ImportError:
+            version = None
+
+    if version is not None:
+        try:
+            return version('spice-test')
+        except Exception:
+            pass
+
     return 'unknown'
 
 
@@ -80,7 +88,7 @@ def main_event_inference(args):
         if not os.path.exists(snakefile):
             raise FileNotFoundError(f"Snakefile_event_inference not found at {snakefile}")
 
-        if args.skip_preprocessing:
+        if not args.run_preprocessing:
             spice.load_config(args.config_path)
             from spice import config
             import shutil
@@ -97,10 +105,10 @@ def main_event_inference(args):
                 src = os.path.join(config['directories']['base_dir'], src)
 
             if not os.path.exists(dst):
-                print(f"--skip-preprocessing set. Copying {src} -> {dst}")
+                print(f"--run-preprocessing not set. Copying {src} -> {dst}")
                 shutil.copyfile(src, dst)
             else:
-                print(f"--skip-preprocessing set. Using existing {dst}")
+                print(f"--run-preprocessing not set. Using existing {dst}")
 
         cmd = [
             'snakemake',
@@ -112,9 +120,9 @@ def main_event_inference(args):
             '--keep-going'
         ]
         
-        # Pass skip_preprocessing to snakemake if set
-        if args.skip_preprocessing:
-            cmd.extend(['--config', 'skip_preprocessing=True'])
+        # Pass run_preprocessing to snakemake if set
+        if args.run_preprocessing:
+            cmd.extend(['--config', 'run_preprocessing=True'])
         
         # add execution mode and number of jobs/cores
         if args.snakemake_mode == 'slurm':
@@ -230,8 +238,8 @@ def main_event_inference(args):
         logger.info('Cleaning old intermediate files')
         step_aware_cleanup(results_events_dir, which)
 
-    # Run preprocessing first unless skipped
-    if 'preprocessing' in which and not args.skip_preprocessing:
+    # Run preprocessing only when requested
+    if 'preprocessing' in which and args.run_preprocessing:
         from spice.preprocessing.extra_preprocessing import main as extra_preprocessing_main
         logger.info('Starting extra preprocessing step (pre-split)')
         extra_preprocessing_main(
@@ -240,8 +248,8 @@ def main_event_inference(args):
             skip_phasing=bool(args.pre_skip_phasing),
             skip_centromeres=bool(args.pre_skip_centromeres),
         )
-    elif 'preprocessing' in which and args.skip_preprocessing:
-        logger.info('Skipping preprocessing due to --skip-preprocessing')
+    elif 'preprocessing' in which and not args.run_preprocessing:
+        logger.info('Skipping preprocessing (default). Use --run-preprocessing to enable it.')
 
     chrom_segments_file = resolve_copynumber_file()
 
@@ -871,9 +879,9 @@ Examples:
         help='Comma-separated list of sample IDs to process'
     )
     parser_event.add_argument(
-        '--skip-preprocessing',
+        '--run-preprocessing',
         action='store_true',
-        help='Skip the extra preprocessing step that normally runs before split'
+        help='Run the extra preprocessing step before split (default: off)'
     )
     parser_event.add_argument(
         '--pre-unique-chroms',

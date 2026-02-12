@@ -1,6 +1,8 @@
 """Main loci detection pipeline for de-novo TSG/OG detection."""
 
 import os
+import sys
+from io import StringIO
 from typing import Dict, Tuple, List, Optional
 import pandas as pd
 import numpy as np
@@ -19,6 +21,14 @@ from spice.tsg_og.simulation import copy_list_of_selection_points, convolution_s
 from spice.tsg_og.plateaus import categorize_events_by_plateau_overlap
 from spice.tsg_og.loci import (
     create_loci_df, assign_p_values, calculate_events_per_loci_df)
+
+if sys.version_info >= (3, 9):
+    from importlib.resources import files
+else:
+    try:
+        from importlib_resources import files
+    except ImportError:
+        files = None
 
 logger = get_logger('loci_detection_main')
 CHROMS = ['chr' + str(x) for x in range(1, 23)] + ['chrX', 'chrY']
@@ -1024,14 +1034,24 @@ def loci_assignment(
         
     # Load loci positions from config
     reference_loci_file = config['input_files'].get('reference_loci')
-    if not reference_loci_file or not os.path.exists(reference_loci_file):
-        raise FileNotFoundError(
-            f"reference_loci file not found. Please set config['input_files']['reference_loci'] "
-            f"to point to a TSV file with columns: chrom, start, end, type (OG or TSG)"
-        )
-    
-    logger.info(f'Loading loci positions from {reference_loci_file}')
-    reference_loci_df = pd.read_csv(reference_loci_file, sep='\t')
+    if reference_loci_file and os.path.exists(reference_loci_file):
+        logger.info(f'Loading loci positions from {reference_loci_file}')
+        reference_loci_df = pd.read_csv(reference_loci_file, sep='\t')
+    else:
+        if files is None:
+            raise FileNotFoundError(
+                "importlib.resources unavailable for reference_loci file"
+            )
+        try:
+            resource_name = os.path.basename(reference_loci_file or 'reference_loci_position.tsv')
+            content = files('spice').joinpath('objects', resource_name).read_text()
+            logger.info('Loading loci positions from package resources')
+            reference_loci_df = pd.read_csv(StringIO(content), sep='\t')
+        except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+            raise FileNotFoundError(
+                "reference_loci file not found. Please set config['input_files']['reference_loci'] "
+                "to point to a TSV file with columns: chrom, start, end, type (OG or TSG)"
+            ) from exc
     logger.info(f'Loaded {len(reference_loci_df)} loci positions')
     
     # Validate reference_loci format

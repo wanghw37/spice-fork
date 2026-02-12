@@ -1,8 +1,18 @@
+import os
+import pickle
+import sys
 import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
 
 from spice.utils import open_pickle, CALC_NEW
+if sys.version_info >= (3, 9):
+    from importlib.resources import files
+else:
+    try:
+        from importlib_resources import files
+    except ImportError:
+        files = None
 from spice.event_inference.SV import overlap_svs_with_events_df
 from spice.event_inference.knn_graph import calc_event_distances
 
@@ -46,7 +56,19 @@ def calculate_final_events_knn_score(unique_events_df, knn_train_data, knn_k, ig
                                      clip_k=True):
     if knn_train_data is not None:
         if isinstance(knn_train_data, str):
-            knn_train_data = open_pickle(knn_train_data, fail_if_nonexisting=True)
+            if os.path.exists(knn_train_data):
+                knn_train_data = open_pickle(knn_train_data, fail_if_nonexisting=True)
+            else:
+                if files is None:
+                    raise FileNotFoundError("importlib.resources unavailable for knn_train data")
+                try:
+                    resource_name = os.path.basename(knn_train_data)
+                    content = files('spice').joinpath('objects', resource_name).read_bytes()
+                    knn_train_data = pickle.loads(content)
+                except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+                    raise FileNotFoundError(
+                        "Could not find knn_train data in spice/objects/"
+                    ) from exc
         assert isinstance(knn_train_data, dict)
         event_distances = calc_event_distances(
             knn_train_data, unique_events_df, block_same_id=False,

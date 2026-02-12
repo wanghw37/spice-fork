@@ -3,6 +3,17 @@ from pathlib import Path
 import yaml
 import collections.abc
 from typing import Optional
+import sys
+
+# Use importlib.resources for accessing package data (works with installed packages)
+if sys.version_info >= (3, 9):
+    from importlib.resources import files
+else:
+    try:
+        from importlib_resources import files
+    except ImportError:
+        # Fallback for older Python versions without importlib_resources
+        files = None
 
 def update_nested_dict(orig_dict, updated_values):
     '''
@@ -21,9 +32,23 @@ default_config = None
 config = None
 directories = None
 
+def _read_yaml_content(content):
+    """Read YAML from string content."""
+    return yaml.safe_load(content)
+
 def _read_yaml(path):
+    """Read YAML from a filesystem path."""
     with open(path, 'rt') as f:
         return yaml.safe_load(f.read())
+
+def _get_default_config_content():
+    """Get default_config.yaml content via package resources."""
+    if files is None:
+        raise FileNotFoundError("importlib.resources unavailable for default_config.yaml")
+    try:
+        return files('spice').joinpath('objects', 'default_config.yaml').read_text()
+    except (TypeError, ImportError, AttributeError, FileNotFoundError) as exc:
+        raise FileNotFoundError("Could not find default_config.yaml in spice/objects/") from exc
 
 def load_config(config_path: Optional[str] = None, assert_exists: bool = True):
     """
@@ -40,8 +65,8 @@ def load_config(config_path: Optional[str] = None, assert_exists: bool = True):
         set_config(config_path)
 
     # Always load the default first
-    default_path = os.path.join(Path(__file__).parent, 'default_config.yaml')
-    default_config = _read_yaml(default_path)
+    default_config_content = _get_default_config_content()
+    default_config = _read_yaml_content(default_config_content)
 
     # Determine user config source
     user_cfg = {}
@@ -62,34 +87,38 @@ def load_config(config_path: Optional[str] = None, assert_exists: bool = True):
             config['meta']['source_path'] = os.path.abspath(config_path or env_cfg_path)
     directories = config.get('directories', {})
 
-    # Fallbacks for core directories if not provided
-    package_root = Path(__file__).parent.parent
-    directories['base_dir'] = str(package_root)
-    fallback_dirs = {
-        'data_dir': package_root / 'data',
-        'results_dir': package_root / 'results',
-        'log_dir': package_root / 'logs',
-        'plot_dir': package_root / 'plots',
-        'tmp_dir': package_root / 'tmp',
-    }
-    for k, v in fallback_dirs.items():
-        if not directories.get(k):
-            directories[k] = str(v)
+    if config_path is not None:
+        # Require base_dir and derive fallbacks from it
+        base_dir = directories.get('base_dir')
+        if not base_dir:
+            raise ValueError("Config file must specify 'directories.base_dir'.")
+        base_dir_path = Path(base_dir).expanduser().resolve()
+        directories['base_dir'] = str(base_dir_path)
+        fallback_dirs = {
+            'data_dir': base_dir_path / 'data',
+            'results_dir': base_dir_path / 'results',
+            'log_dir': base_dir_path / 'logs',
+            'plot_dir': base_dir_path / 'plots',
+            'tmp_dir': base_dir_path / 'tmp',
+        }
+        for k, v in fallback_dirs.items():
+            if not directories.get(k):
+                directories[k] = str(v)
 
-    # Persist back into config
-    config['directories'] = directories
+        # Persist back into config
+        config['directories'] = directories
 
-    # Normalize all directory paths: if not absolute, resolve under package root
-    for dkey, dval in list(directories.items()):
-        if isinstance(dval, str) and dval and not os.path.isabs(dval):
-            directories[dkey] = str((package_root / dval).resolve())
-    config['directories'] = directories
+        # Normalize all directory paths: if not absolute, resolve under base_dir
+        for dkey, dval in list(directories.items()):
+            if isinstance(dval, str) and dval and not os.path.isabs(dval):
+                directories[dkey] = str((base_dir_path / dval).resolve())
+        config['directories'] = directories
 
-    if 'input_files' in config and 'knn_train' in config['input_files']:
-        knn_path = config['input_files']['knn_train']
-        if knn_path and not os.path.isabs(knn_path):
-            abs_knn_path = str((package_root / knn_path).resolve())
-            config['input_files']['knn_train'] = abs_knn_path
+        if 'input_files' in config and 'knn_train' in config['input_files']:
+            knn_path = config['input_files']['knn_train']
+            if knn_path and not os.path.isabs(knn_path):
+                abs_knn_path = str((base_dir_path / knn_path).resolve())
+                config['input_files']['knn_train'] = abs_knn_path
     return config
 
 # Perform an initial load so library usage without CLI still works as before

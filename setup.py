@@ -3,7 +3,7 @@ from pathlib import Path
 
 setup(
     name='spice-test',
-    version='0.1',
+    version='0.1.8',
     author='Tom L Kaufmann',
     description='SPICE: Selection Patterns In somatic Copy-number Events',
     author_email='tkau93@gmail.com, marina.55kovic@gmail.com, roland.f.schwarz@gmail.com',
@@ -12,7 +12,7 @@ setup(
     url='https://bitbucket.org/schwarzlab/spice',
     packages=find_packages(),
     package_data={
-        'spice': ['*.yaml', 'objects/**/*.tsv', 'objects/**/*.pickle'],
+        'spice': ['objects/**/*.yaml', 'objects/**/*.tsv', 'objects/**/*.pickle'],
     },
     zip_safe=False,
     entry_points={
@@ -32,6 +32,7 @@ setup(
         'pyyaml',
         'joblib',
         'ortools==9.8.3296',
+        'importlib_resources>=5.0; python_version < "3.9"',
     ],
     extras_require={
         'snakemake': ['snakemake>=7.0'],

@@ -54,11 +54,14 @@ SPICE uses a configuration file for each run which are specified using the `--co
 This means you can keep multiple configs (e.g., in `configs/`) and select them at runtime.
 
 Parameters and directories not specified in the provided config file are taken from the default config file `default_config.yaml`.
+Each config must specify `name` and `directories.base_dir`.
 
 ### 1.1 Minimal `config.yaml` override example
-Each config must contain a name and the location of the input copy-number file like so:
+Each config must contain a name, a base directory, and the location of the input copy-number file like so:
 ```yaml
 name: example_run
+directories:
+   base_dir: /path/to/project
 input_files:
    copynumber: data/example_data.tsv
 ```
@@ -68,7 +71,7 @@ For other parameters that can be modified, see `default_config.yaml`.
 ### 1.2 Relative vs absolute paths
 
 - `directories.*` entries (e.g., `data_dir`, `results_dir`, `log_dir`) as well as input files can be given as relative or absolute paths.
-   - If relative, SPICE resolves them against the package root (i.e., the repository directory when installed in editable mode).
+   - If relative, SPICE resolves them against `directories.base_dir`.
    - If absolute, SPICE uses them as-is.
 
 
@@ -215,7 +218,7 @@ spice event_inference --clean --config <path/to/config>
 
 ### 3.4 Preprocessing Step Details
 
-The preprocessing step runs automatically (unless `--skip-preprocessing` is provided) and prepares the input for robust event inference. It performs:
+The preprocessing step runs only when `--run-preprocessing` is provided and prepares the input for robust event inference. It performs:
 
 - Data normalization: ensures chromosome names use `chr` prefix; converts starts/ends to integers and adjusts starts to 0-based.
 - CN capping and filtering: caps copy numbers at 8; removes segments shorter than 1kb.
@@ -227,7 +230,7 @@ The preprocessing step runs automatically (unless `--skip-preprocessing` is prov
 - Short arms and bounds: handles short arms and aligns segment ends to reference chromosome lengths.
 
 Run control:
-- Use `--skip-preprocessing` to bypass this step and proceed directly to `split`.
+- Use `--run-preprocessing` to enable this step (default is to skip and proceed directly to `split`).
 
 ### 3.5 Parallel Processing
 

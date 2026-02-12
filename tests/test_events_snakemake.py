@@ -165,7 +165,7 @@ def test_snakemake_matches_cli_example(repo_root_dir, example_data_exists, knn_t
                 "use_cache": True,
                 "logging_level": "INFO",
                 "mcmc_n_iterations_scale": 1.0,
-                "skip_preprocessing": True,
+                "run_preprocessing": False,
             },
         }
 
@@ -193,7 +193,6 @@ def test_snakemake_matches_cli_example(repo_root_dir, example_data_exists, knn_t
             "event_inference",
             "--config",
             normal_config_path,
-            "--skip-preprocessing",
         ]
         subprocess.run(cli_cmd, check=True, cwd=repo_root, env=env)
 
