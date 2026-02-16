@@ -70,7 +70,7 @@ def load_segmentation(size=None, data_loaders_dir_top=DATA_LOADERS_DIR):
     from spice.segmentation import create_segmentation
     cur_filename = os.path.join(data_loaders_dir_top, 'segmentations', f'segmentation_{int(size)}.pickle')
     if not os.path.exists(cur_filename):
-        logger.warning(f'File not found: {cur_filename} -> creating segmentation with size {size}')
+        logger.info(f'Creating segmentation with size {size}')
         if size is not None:
             segmentation = create_segmentation(size)
             save_pickle(segmentation, cur_filename)
