@@ -11,12 +11,7 @@
 - Python >= 3.8
 - medicc2 (including openfst)
 
-### 0.2. Install from pip/conda (recommended)
-Coming soon!
-
-### 0.3 Install from source
-
-1. Install MEDICC2 using conda/mamba:
+Install MEDICC2 using conda/mamba as it requires compilation of source files
 ```bash
 conda install -c bioconda -c conda-forge medicc2
 ```
@@ -27,18 +22,27 @@ conda create -n spice_env -c conda-forge -c bioconda medicc2
 conda activate spice_env
 ```
 
-2. Clone the repository:
+### 0.2. Install from pip (recommended)
+
+After installing MEDICC2 through conda/mamba simply install spice using pip
+
+```bash
+pip install scna-spice
+```
+
+### 0.3 Install from source
+
+Clone the repository:
 ```bash
 git clone git@bitbucket.org:schwarzlab/spice.git
 cd spice
 ```
 
-3. Install in development mode:
+And then install in development mode:
 ```bash
 pip install -e .
 ```
 
-This will install SPICE and all its dependencies, and make the `spice` command available in your shell.
 
 ### 0.4 Optional Dependencies
 
@@ -47,6 +51,10 @@ To use SPICE with Snakemake for parallel execution on computing clusters, instal
 conda install bioconda::snakemake
 ```
 
+To use the extra preprocessing also install CNSistent:
+```bash
+pip install CNSistent
+```
 
 ## 1. Configuration
 
