@@ -294,6 +294,9 @@ def get_or_infer_xy_status(data):
 
 def main_aggregate_quiet(*args, **kwargs):
     '''Wrapper around consistent's main_aggregate to suppress the print statements'''
-    from cns import main_aggregate
+    try:
+        from cns import main_aggregate
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError('CNSistent is not installed. Please install using "pip install CNSistent" in order to use the preprocessing functions.')
     with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull):
         return main_aggregate(*args, **kwargs)
