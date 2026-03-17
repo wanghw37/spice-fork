@@ -511,8 +511,9 @@ rule mcmc_large:
                 skip_loh_check=skip_loh_check,
             )
         
+        skip_loh = config['params'].get('skip_loh_check_for_large_chroms', True)
         try:
-            result = _solve_with_mcmc_wrapper(skip_loh_check=False)
+            result = _solve_with_mcmc_wrapper(skip_loh_check=skip_loh)
             logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC")
         except FunctionTimeoutError:
             logger.warning(
@@ -581,8 +582,9 @@ rule mcmc_fallback:
                 skip_loh_check=skip_loh_check,
             )
         
+        skip_loh = config['params'].get('skip_loh_check_for_large_chroms', True)
         try:
-            result = _solve_with_mcmc_wrapper(skip_loh_check=False)
+            result = _solve_with_mcmc_wrapper(skip_loh_check=skip_loh)
             logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC fallback")
         except FunctionTimeoutError:
             logger.warning(

@@ -29,9 +29,10 @@ params:
   mcmc_min_T: 1
   mcmc_n_iterations_scale: 200
   # Time limits (in seconds, per chromosome)
-  time_limit_all_solutions: 300
+  time_limit_all_solutions: None
   time_limit_loh_filters: None
-  time_limit_mcmc: 300
+  time_limit_mcmc: None
+  skip_loh_check_for_large_chroms: True # Whether to skip LOH checks for large chromosomes when MCMC solving times out (can lead to inaccurate results, but might be necessary for large chromosomes)
   # Cluster parameters for Snakemake
   knn_mem: 16000
   full_path_mem: 16000

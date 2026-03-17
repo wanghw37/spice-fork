@@ -55,7 +55,7 @@ def mcmc_event_selection(
         loh_time_limit=None,
         check_all_loh_solutions=False,
         perform_loh_checks=None, # not yet implemented
-        skip_loh_check=False,
+        skip_loh_check=True,
         knn_train_data='sv_and_unamb',
         loh_check_before_distance_calculation=False, # needed to compare results with knn
         total_cn=False,
@@ -493,7 +493,7 @@ def calc_event_distances_mcmc_wrapper(
 
 def create_diff_and_check_loh(event_proposal, cn_profile, has_wgd=False, total_cn=False,
                               use_cache=True, check_all_solutions=False, single_time_limit=1,
-                              skip_loh_check=False):
+                              skip_loh_check=True):
     if not use_cache:
         raise DeprecationWarning('use_cache must be True')
     
@@ -513,14 +513,15 @@ def create_diff_and_check_loh(event_proposal, cn_profile, has_wgd=False, total_c
 
 @cache
 def _create_diff_and_check_loh_impl(event_proposal, cn_profile, has_wgd=False, check_all_solutions=False,
-                                    single_time_limit=1, total_cn=False, skip_loh_check=False):
+                                    single_time_limit=1, total_cn=False, skip_loh_check=True):
     cn_profile = np.array(cn_profile)
     if has_wgd:
         diffs = get_events_diff_from_coords_wgd(
             [event_proposal], cn_profile, lexsort_diffs=True, filter_missed_lohs=False, fail_if_empty=False)
     else:
         diffs = get_events_diff_from_coords(
-            [event_proposal], cn_profile, lexsort_diffs=True, filter_missed_lohs=True, fail_if_empty=False)
+            [event_proposal], cn_profile, lexsort_diffs=True, filter_missed_lohs=not skip_loh_check,
+            fail_if_empty=False)
     if len(diffs) == 0:
         return []
     assert diffs is not None, 'no diffs found'

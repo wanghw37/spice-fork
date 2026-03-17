@@ -332,6 +332,7 @@ def main_event_inference(args):
     if 'large_chroms' in which:
         logger.info('Starting MCMC inference for large chromosomes with many events')
         skip_existing = config['params'].get('skip_existing', False)
+        skip_loh_check = config['params'].get('skip_loh_check_for_large_chroms', True)
         for wgd_status in ['nowgd', 'wgd']:
             if not os.path.exists(os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large')):
                 logger.info(f"Directory {os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large')} does not exist, skipping large chromosomes for {wgd_status}")
@@ -347,28 +348,22 @@ def main_event_inference(args):
                 if skip_existing and os.path.exists(output_file):
                     logger.info(f"Skipping large_chroms for {cur_id} ({wgd_status}) as {output_file} exists.")
                     return {'status': 'skipped', 'cur_id': cur_id, 'step': 'large_chroms'}
-                @timeout(config['params']['time_limit_mcmc'], mode="auto")
-                def _solve_with_mcmc_wrapper(cur_id, skip_loh_check):
-                    return solve_with_mcmc_wrapper(
-                        output_file=output_file,
-                        chrom_file=os.path.join(results_events_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
-                        is_wgd=is_wgd,
-                        chrom_segments_file=chrom_segments_file,
-                        sv_data_file=config['input_files'].get('sv', None),
-                        knn_train_data=None,
-                        k=config['params']['knn_k'],
-                        total_cn=total_cn,
-                        save_all_scores=None,
-                        n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
-                        log_progress=True,
-                        fail_on_empty=False,
-                        skip_loh_check=skip_loh_check
-                    )
-                try:
-                    return _solve_with_mcmc_wrapper(cur_id, skip_loh_check=False)
-                except FunctionTimeoutError as e:
-                    logger.warning(f'MCMC solving for {cur_id} timed out after {config["params"]["time_limit_mcmc"]} seconds. Will rerun with LOH checks skipped. This might lead to inaccurate results! Consider increasing "time_limit_mcmc" in the config file.')
-                    return _solve_with_mcmc_wrapper(cur_id, skip_loh_check=True)
+
+                return solve_with_mcmc_wrapper(
+                    output_file=output_file,
+                    chrom_file=os.path.join(results_events_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
+                    is_wgd=is_wgd,
+                    chrom_segments_file=chrom_segments_file,
+                    sv_data_file=config['input_files'].get('sv', None),
+                    knn_train_data=None,
+                    k=config['params']['knn_k'],
+                    total_cn=total_cn,
+                    save_all_scores=None,
+                    n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
+                    log_progress=True,
+                    fail_on_empty=False,
+                    skip_loh_check=skip_loh_check
+                )
 
             results = _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
             cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']

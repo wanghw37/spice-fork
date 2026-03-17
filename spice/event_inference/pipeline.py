@@ -206,7 +206,7 @@ def solve_with_mcmc_wrapper(
         output_file=None, sv_matching_threshold=10, n_iterations=None, n_iteration_scale=100, perform_loh_checks=False,
         min_T=1, max_T=-6, swap_event_based_on_score=True, check_all_loh_solutions=False, total_cn=False,
         verbose=False, save_all_scores=None, log_progress=False, show_progress=False, fail_on_empty=True,
-        skip_loh_check=False):
+        skip_loh_check=True):
     assert (n_iterations is not None) ^ (n_iteration_scale is not None), 'Either n_iterations or n_iteration_scale must be provided'
 
     chrom_data = open_pickle(chrom_file, fail_if_nonexisting=True)
