@@ -323,6 +323,13 @@ class FunctionTimeoutError(TimeoutError):
 
 
 def timeout(seconds, mode="auto", error=FunctionTimeoutError):
+    if seconds is None or seconds == "None":
+        def decorator(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            return wrapper
+        return decorator
     if seconds <= 0:
         raise ValueError("seconds must be > 0")
 
