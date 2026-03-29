@@ -65,3 +65,76 @@ class TestKNNDistance:
             assert isinstance(knn_train, dict), "Training data should be a dict"
         except FileNotFoundError:
             pytest.skip("Training data file not found - acceptable for fresh install")
+
+    def test_calc_event_distances_basic(self):
+        """Test L4.1: Distance calculation with sample events."""
+        from spice.event_inference.knn_graph import calc_event_distances, EventDistData
+
+        train_events = {
+            ("gain", False, "nowgd"): (
+                np.array([1e6]),
+                np.array([1e8]),
+                np.array(["id1"]),
+            ),
+            ("loss", False, "nowgd"): (
+                np.array([1e6]),
+                np.array([1e8]),
+                np.array(["id2"]),
+            ),
+        }
+
+        test_events = EventDistData(
+            chrom=np.array(["chr1"]),
+            starts=np.array([0]),
+            ends=np.array([1e6]),
+            widths=np.array([1e6]),
+            type=np.array(["gain"]),
+            is_telomere_bound=np.array([False]),
+            is_whole_chrom=np.array([False]),
+            is_whole_arm=np.array([False]),
+            wgd=np.array(["nowgd"]),
+            chrom_lengths=np.array([1e8]),
+        )
+
+        distances = calc_event_distances(
+            train_events, test_events, ks=[1], block_same_id=False
+        )
+
+        assert distances.shape == (1, 1), (
+            f"Expected shape (1, 1), got {distances.shape}"
+        )
+        assert np.isfinite(distances[0, 0]), "Distance should be finite"
+
+    def test_knn_solution_selection(self):
+        """Test L4.5: k-NN selects solution with minimum distance."""
+        from spice.event_inference.knn_graph import EventDistData, calc_event_distances
+
+        train_events = {
+            ("gain", False, "nowgd"): (
+                np.array([1e6, 2e6]),
+                np.array([1e8, 1e8]),
+                np.array(["id1", "id2"]),
+            ),
+            ("loss", False, "nowgd"): (np.array([]), np.array([]), np.array([])),
+        }
+
+        test_events_data = {
+            "chrom": np.array(["chr1"]),
+            "starts": np.array([0]),
+            "ends": np.array([1e6]),
+            "widths": np.array([1e6]),
+            "type": np.array(["gain"]),
+            "is_telomere_bound": np.array([False]),
+            "is_whole_chrom": np.array([False]),
+            "is_whole_arm": np.array([False]),
+            "wgd": np.array(["nowgd"]),
+            "chrom_lengths": np.array([1e8]),
+        }
+
+        test_events = EventDistData(**test_events_data)
+
+        distances = calc_event_distances(
+            train_events, test_events, ks=[1], block_same_id=False
+        )
+
+        assert distances[0, 0] < 1.0, f"Expected small distance, got {distances[0, 0]}"
