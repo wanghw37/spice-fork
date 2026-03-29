@@ -206,6 +206,20 @@ def get_mcmc_large_outputs(wildcards):
     return outputs
 
 
+def get_mcmc_fallback_outputs(wildcards):
+    """Get mcmc_fallback output files for all full_paths jobs that have failed markers."""
+    checkpoints.split.get(**wildcards)
+    outputs = []
+    for wgd in ['nowgd', 'wgd']:
+        failed_dir = os.path.join(results_dir, wgd, "full_paths_failed")
+        if os.path.exists(failed_dir):
+            for f in glob(os.path.join(failed_dir, "*.failed")):
+                cid = os.path.basename(f).replace(".failed", "")
+                if selected_ids is None or cid in selected_ids:
+                    outputs.append(os.path.join(results_dir, wgd, "mcmc_solved_chroms_full", f"{cid}.pickle"))
+    return outputs
+
+
 # -----------------------------
 # Rules (per-file with wildcards)
 # -----------------------------
@@ -251,6 +265,14 @@ rule aggregate_mcmc_large:
         get_mcmc_large_outputs
     output:
         touch(os.path.join(results_dir, "mcmc_large_aggregate.done"))
+
+
+rule aggregate_mcmc_fallback:
+    """Aggregate rule to ensure all mcmc_fallback jobs complete before combine."""
+    input:
+        get_mcmc_fallback_outputs
+    output:
+        touch(os.path.join(results_dir, "mcmc_fallback_aggregate.done"))
 
 
 rule preprocessing:
@@ -599,6 +621,7 @@ rule combine:
     input:
         full_paths_done=os.path.join(results_dir, "full_paths_aggregate.done"),
         mcmc_large_done=os.path.join(results_dir, "mcmc_large_aggregate.done"),
+        mcmc_fallback_done=os.path.join(results_dir, "mcmc_fallback_aggregate.done"),
         knn_outputs=get_disambiguate_knn_outputs,
     output:
         os.path.join(results_dir, "final_events.tsv"),

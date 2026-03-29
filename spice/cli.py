@@ -349,21 +349,35 @@ def main_event_inference(args):
                     logger.info(f"Skipping large_chroms for {cur_id} ({wgd_status}) as {output_file} exists.")
                     return {'status': 'skipped', 'cur_id': cur_id, 'step': 'large_chroms'}
 
-                return solve_with_mcmc_wrapper(
-                    output_file=output_file,
-                    chrom_file=os.path.join(results_events_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
-                    is_wgd=is_wgd,
-                    chrom_segments_file=chrom_segments_file,
-                    sv_data_file=config['input_files'].get('sv', None),
-                    knn_train_data=None,
-                    k=config['params']['knn_k'],
-                    total_cn=total_cn,
-                    save_all_scores=None,
-                    n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
-                    log_progress=True,
-                    fail_on_empty=False,
-                    skip_loh_check=skip_loh_check
-                )
+                time_limit = config['params'].get('time_limit_mcmc', None)
+
+                @timeout(time_limit, mode="auto")
+                def _solve(skip_loh):
+                    return solve_with_mcmc_wrapper(
+                        output_file=output_file,
+                        chrom_file=os.path.join(results_events_dir, wgd_status, 'chrom_data_large', f'{cur_id}.pickle'),
+                        is_wgd=is_wgd,
+                        chrom_segments_file=chrom_segments_file,
+                        sv_data_file=config['input_files'].get('sv', None),
+                        knn_train_data=None,
+                        k=config['params']['knn_k'],
+                        total_cn=total_cn,
+                        save_all_scores=None,
+                        n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
+                        log_progress=True,
+                        fail_on_empty=False,
+                        skip_loh_check=skip_loh
+                    )
+
+                try:
+                    return _solve(skip_loh=skip_loh_check)
+                except FunctionTimeoutError:
+                    logger.warning(
+                        f'MCMC solving for {cur_id} timed out after {time_limit} seconds. '
+                        'Will rerun with LOH checks skipped. '
+                        'Consider increasing "time_limit_mcmc" in the config file.'
+                    )
+                    return _solve(skip_loh=True)
 
             results = _run_batch(cur_ids, args.cores, f'Large chromosomes ({wgd_status})', run_mcmc, logger)
             cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']
