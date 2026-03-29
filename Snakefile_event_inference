@@ -405,7 +405,7 @@ rule full_paths:
                     total_cn=config['params'].get('total_cn', False),
                     all_loh_solutions=config['params']['all_loh_solutions'],
                     save_output=True,
-                    skip_loh_checks=True,
+                    skip_loh_checks=config['params'].get('skip_loh_check_for_large_chroms', False),
                 )
             
             result = run_full_paths()
@@ -533,7 +533,7 @@ rule mcmc_large:
                 skip_loh_check=skip_loh_check,
             )
         
-        skip_loh = config['params'].get('skip_loh_check_for_large_chroms', True)
+        skip_loh = config['params'].get('skip_loh_check_for_large_chroms', False)
         try:
             result = _solve_with_mcmc_wrapper(skip_loh_check=skip_loh)
             logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC")
@@ -604,7 +604,7 @@ rule mcmc_fallback:
                 skip_loh_check=skip_loh_check,
             )
         
-        skip_loh = config['params'].get('skip_loh_check_for_large_chroms', True)
+        skip_loh = config['params'].get('skip_loh_check_for_large_chroms', False)
         try:
             result = _solve_with_mcmc_wrapper(skip_loh_check=skip_loh)
             logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC fallback")

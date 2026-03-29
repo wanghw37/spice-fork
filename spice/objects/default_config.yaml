@@ -32,7 +32,7 @@ params:
   time_limit_all_solutions: None
   time_limit_loh_filters: None
   time_limit_mcmc: None
-  skip_loh_check_for_large_chroms: True # Whether to skip LOH checks for large chromosomes when MCMC solving times out (can lead to inaccurate results, but might be necessary for large chromosomes)
+  skip_loh_check_for_large_chroms: False # Whether to skip LOH checks for large chromosomes (can lead to inaccurate results, but might be necessary for very large chromosomes; set to True if MCMC times out)
   # Cluster parameters for Snakemake
   knn_mem: 16000
   full_path_mem: 16000
