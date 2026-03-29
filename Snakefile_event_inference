@@ -531,12 +531,10 @@ rule mcmc_large:
                 log_progress=True,
                 fail_on_empty=False,
                 skip_loh_check=skip_loh_check,
+                stop_after_no_improvement=config['params'].get('mcmc_stop_after_no_improvement', None),
             )
-        
+
         skip_loh = config['params'].get('skip_loh_check_for_large_chroms', False)
-        try:
-            result = _solve_with_mcmc_wrapper(skip_loh_check=skip_loh)
-            logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC")
         except FunctionTimeoutError:
             logger.warning(
                 f'MCMC solving for {wildcards.chrom_id} timed out after {config["params"].get("time_limit_mcmc", None)} seconds. '
@@ -602,6 +600,7 @@ rule mcmc_fallback:
                 log_progress=True,
                 fail_on_empty=False,
                 skip_loh_check=skip_loh_check,
+                stop_after_no_improvement=config['params'].get('mcmc_stop_after_no_improvement', None),
             )
         
         skip_loh = config['params'].get('skip_loh_check_for_large_chroms', False)

@@ -28,6 +28,7 @@ params:
   mcmc_max_T: -6
   mcmc_min_T: 1
   mcmc_n_iterations_scale: 200
+  mcmc_stop_after_no_improvement: null # Stop MCMC early if score does not improve for this many iterations (null = disabled)
   # Time limits (in seconds, per chromosome)
   time_limit_all_solutions: None
   time_limit_loh_filters: None

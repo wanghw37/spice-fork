@@ -206,7 +206,7 @@ def solve_with_mcmc_wrapper(
         output_file=None, sv_matching_threshold=10, n_iterations=None, n_iteration_scale=100, perform_loh_checks=False,
         min_T=1, max_T=-6, swap_event_based_on_score=True, check_all_loh_solutions=False, total_cn=False,
         verbose=False, save_all_scores=None, log_progress=False, show_progress=False, fail_on_empty=True,
-        skip_loh_check=True):
+        skip_loh_check=True, stop_after_no_improvement=None):
     assert (n_iterations is not None) ^ (n_iteration_scale is not None), 'Either n_iterations or n_iteration_scale must be provided'
 
     chrom_data = open_pickle(chrom_file, fail_if_nonexisting=True)
@@ -248,7 +248,8 @@ def solve_with_mcmc_wrapper(
                         log_progress=log_progress,
                         calc_new_filename=None,
                         calc_new_verbose=False,
-                        skip_loh_check=skip_loh_check
+                        skip_loh_check=skip_loh_check,
+                        stop_after_no_improvement=stop_after_no_improvement,
                         )
     
     # if it fails with SVs, rerun without them
@@ -277,7 +278,8 @@ def solve_with_mcmc_wrapper(
                         perform_loh_checks=perform_loh_checks,
                         log_progress=log_progress,
                         calc_new_filename=None,
-                        calc_new_verbose=False)
+                        calc_new_verbose=False,
+                        stop_after_no_improvement=stop_after_no_improvement)
 
     if mcmc_result is not None:
         final_events_df = create_best_events_df_from_mcmc(mcmc_result, cur_chrom_segments, chrom_data, has_wgd=chrom_data.has_wgd)  

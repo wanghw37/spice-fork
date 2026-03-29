@@ -332,7 +332,8 @@ def main_event_inference(args):
     if 'large_chroms' in which:
         logger.info('Starting MCMC inference for large chromosomes with many events')
         skip_existing = config['params'].get('skip_existing', False)
-        skip_loh_check = config['params'].get('skip_loh_check_for_large_chroms', True)
+        skip_loh_check = config['params'].get('skip_loh_check_for_large_chroms', False)
+        stop_after_no_improvement = config['params'].get('mcmc_stop_after_no_improvement', None)
         for wgd_status in ['nowgd', 'wgd']:
             if not os.path.exists(os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large')):
                 logger.info(f"Directory {os.path.join(str(results_events_dir), wgd_status, 'chrom_data_large')} does not exist, skipping large chromosomes for {wgd_status}")
@@ -366,7 +367,8 @@ def main_event_inference(args):
                         n_iteration_scale=config['params']['mcmc_n_iterations_scale'],
                         log_progress=True,
                         fail_on_empty=False,
-                        skip_loh_check=skip_loh
+                        skip_loh_check=skip_loh,
+                        stop_after_no_improvement=stop_after_no_improvement,
                     )
 
                 try:
