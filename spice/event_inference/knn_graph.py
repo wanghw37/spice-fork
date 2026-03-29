@@ -51,7 +51,7 @@ def get_event_dist_data_from_df(events_df):
 def calc_event_distances(train_events, test_events, wgd_split=True, block_same_id=True,
                          assert_finite=True, ks=[1, 2, 3, 4, 5, 10, 25, 100, 250, 500],
                          show_progress=False, ignore_empty_train=False, clip_k=False,
-                         log10_distances=True, single_width_bin=True):
+                         log10_distances=True, single_width_bin=False):
 
     single_k = not hasattr(ks, '__iter__')
     if single_k:
@@ -198,7 +198,7 @@ def calc_event_distances(train_events, test_events, wgd_split=True, block_same_i
 
 def solve_with_knn(full_paths, cur_chrom_segments, knn_train_data, k=250, wgd_split=True,
                    log10_distances=True, save_all_scores=None, ignore_empty_train=False,
-                   single_width_bin=True, clip_k=True, perform_loh_checks=False):
+                   single_width_bin=False, clip_k=True, perform_loh_checks=False):
 
     # because of how calc_event_distances works now...
     if hasattr(k, '__iter__'):

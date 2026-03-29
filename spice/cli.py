@@ -321,7 +321,7 @@ def main_event_inference(args):
                     full_paths_multiple_solutions_dirs=full_paths_multiple_solutions_dirs,
                     save_all_scores=None,
                     perform_loh_checks=True,
-                    single_width_bin=True
+                    single_width_bin=config['params'].get('knn_single_width_bin', False)
                 )
             results = _run_batch(cur_ids, args.cores, f'Disambiguate solutions ({wgd_status})', run_knn, logger)
             cur_failed_reports = [r for r in results if isinstance(r, dict) and r.get('status') == 'failed']

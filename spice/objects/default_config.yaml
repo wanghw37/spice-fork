@@ -23,6 +23,7 @@ params:
   sv_matching_threshold: 10
   sv_filter_dup_del: True
   knn_k: 250
+  knn_single_width_bin: False # If True, ignore event width when selecting KNN neighbours (faster but less accurate)
   all_loh_solutions: False
   timing_solution_threshold: 0.316 # 1/10**(1/2)
   mcmc_max_T: -6

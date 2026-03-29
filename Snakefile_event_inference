@@ -471,7 +471,7 @@ rule disambiguate_knn:
             full_paths_multiple_solutions_dirs=full_paths_multiple_solutions_dirs,
             save_all_scores=None,
             perform_loh_checks=True,
-            single_width_bin=True,
+            single_width_bin=config['params'].get('knn_single_width_bin', False),
         )
         
         logger.info(f"Successfully disambiguated {wildcards.chrom_id} ({wildcards.wgd})")

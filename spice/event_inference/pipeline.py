@@ -158,7 +158,7 @@ def create_knn_train_data(output_file, knn_train_data_ext=None, full_paths_singl
 
 
 def solve_with_knn_wrapper(cur_id, chrom_segments_file, full_paths_multiple_solutions_dirs, is_wgd, knn_train_data=None,
-                           k=250, single_width_bin=True, perform_loh_checks=False,
+                           k=250, single_width_bin=False, perform_loh_checks=False,
                            save_all_scores=None, output_file=None):
     
     if isinstance(full_paths_multiple_solutions_dirs, str):
