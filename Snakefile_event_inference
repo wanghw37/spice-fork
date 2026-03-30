@@ -121,6 +121,9 @@ log_dir = directories["log_dir"]
 os.makedirs(results_dir, exist_ok=True)
 os.makedirs(log_dir, exist_ok=True)
 
+results_events_dir = os.path.join(results_dir, 'events')
+os.makedirs(results_events_dir, exist_ok=True)
+
 # Persist merged config for provenance
 merged_config_path = os.path.join(results_dir, "config.yaml")
 with open(merged_config_path, "wt") as f:
@@ -168,9 +171,10 @@ def get_chrom_ids_from_dir(directory):
 
 def get_full_chrom_ids(wildcards):
     """Get all chromosome IDs from chrom_data_full directories."""
+    checkpoints.split.get(**wildcards)
     chrom_ids = []
     for wgd in ['nowgd', 'wgd']:
-        chrom_dir = checkpoints.split.get(**wildcards).output[0].replace('split.done', f'{wgd}/chrom_data_full')
+        chrom_dir = os.path.join(results_events_dir, wgd, 'chrom_data_full')
         ids = get_chrom_ids_from_dir(chrom_dir)
         if selected_ids:
             ids = [x for x in ids if x in selected_ids]
@@ -180,9 +184,10 @@ def get_full_chrom_ids(wildcards):
 
 def get_large_chrom_ids(wildcards):
     """Get all chromosome IDs from chrom_data_large directories."""
+    checkpoints.split.get(**wildcards)
     chrom_ids = []
     for wgd in ['nowgd', 'wgd']:
-        chrom_dir = checkpoints.split.get(**wildcards).output[0].replace('split.done', f'{wgd}/chrom_data_large')
+        chrom_dir = os.path.join(results_events_dir, wgd, 'chrom_data_large')
         ids = get_chrom_ids_from_dir(chrom_dir)
         if selected_ids:
             ids = [x for x in ids if x in selected_ids]
@@ -194,7 +199,7 @@ def get_full_paths_outputs(wildcards):
     """Get all full_paths marker files that should be created."""
     outputs = []
     for wgd, cid in get_full_chrom_ids(wildcards):
-        outputs.append(os.path.join(results_dir, wgd, "full_paths_started", f"{cid}.done"))
+        outputs.append(os.path.join(results_events_dir, wgd, "full_paths_started", f"{cid}.done"))
     return outputs
 
 
@@ -202,7 +207,7 @@ def get_mcmc_large_outputs(wildcards):
     """Get all mcmc_large output files that should be created."""
     outputs = []
     for wgd, cid in get_large_chrom_ids(wildcards):
-        outputs.append(os.path.join(results_dir, wgd, "mcmc_solved_chroms_large", f"{cid}.pickle"))
+        outputs.append(os.path.join(results_events_dir, wgd, "mcmc_solved_chroms_large", f"{cid}.pickle"))
     return outputs
 
 
@@ -211,12 +216,12 @@ def get_mcmc_fallback_outputs(wildcards):
     checkpoints.split.get(**wildcards)
     outputs = []
     for wgd in ['nowgd', 'wgd']:
-        failed_dir = os.path.join(results_dir, wgd, "full_paths_failed")
+        failed_dir = os.path.join(results_events_dir, wgd, "full_paths_failed")
         if os.path.exists(failed_dir):
             for f in glob(os.path.join(failed_dir, "*.failed")):
                 cid = os.path.basename(f).replace(".failed", "")
                 if selected_ids is None or cid in selected_ids:
-                    outputs.append(os.path.join(results_dir, wgd, "mcmc_solved_chroms_full", f"{cid}.pickle"))
+                    outputs.append(os.path.join(results_events_dir, wgd, "mcmc_solved_chroms_full", f"{cid}.pickle"))
     return outputs
 
 
@@ -235,7 +240,7 @@ rule aggregate_full_paths:
     input:
         get_full_paths_outputs
     output:
-        touch(os.path.join(results_dir, "full_paths_aggregate.done"))
+        touch(os.path.join(results_events_dir, "full_paths_aggregate.done"))
 
 
 def get_disambiguate_knn_outputs(wildcards):
@@ -249,12 +254,12 @@ def get_disambiguate_knn_outputs(wildcards):
     
     outputs = []
     for wgd in ['nowgd', 'wgd']:
-        multi_sol_dir = os.path.join(results_dir, wgd, 'full_paths_multiple_solutions')
+        multi_sol_dir = os.path.join(results_events_dir, wgd, 'full_paths_multiple_solutions')
         if os.path.exists(multi_sol_dir):
             for f in glob(os.path.join(multi_sol_dir, '*.pickle')):
                 cid = os.path.basename(f).replace('.pickle', '')
                 if selected_ids is None or cid in selected_ids:
-                    outputs.append(os.path.join(results_dir, wgd, 'knn_solved_chroms', f"{cid}.pickle"))
+                    outputs.append(os.path.join(results_events_dir, wgd, 'knn_solved_chroms', f"{cid}.pickle"))
     return outputs
 
 
@@ -264,7 +269,7 @@ rule aggregate_mcmc_large:
     input:
         get_mcmc_large_outputs
     output:
-        touch(os.path.join(results_dir, "mcmc_large_aggregate.done"))
+        touch(os.path.join(results_events_dir, "mcmc_large_aggregate.done"))
 
 
 rule aggregate_mcmc_fallback:
@@ -272,12 +277,12 @@ rule aggregate_mcmc_fallback:
     input:
         get_mcmc_fallback_outputs
     output:
-        touch(os.path.join(results_dir, "mcmc_fallback_aggregate.done"))
+        touch(os.path.join(results_events_dir, "mcmc_fallback_aggregate.done"))
 
 
 rule preprocessing:
     output:
-        touch(os.path.join(results_dir, "preprocessing.done"))
+        touch(os.path.join(results_events_dir, "preprocessing.done"))
     log:
         os.path.join(log_dir, "snakemake_preprocessing.log")
     resources:
@@ -315,7 +320,7 @@ checkpoint split:
     input:
         rules.preprocessing.output
     output:
-        touch(os.path.join(results_dir, "split.done"))
+        touch(os.path.join(results_events_dir, "split.done"))
     log:
         os.path.join(log_dir, "snakemake_split.log")
     resources:
@@ -350,11 +355,11 @@ PY
 
 rule full_paths:
     input:
-        chrom_data=os.path.join(results_dir, "{wgd}", "chrom_data_full", "{chrom_id}.pickle"),
-        split_done=os.path.join(results_dir, "split.done")
+        chrom_data=os.path.join(results_events_dir, "{wgd}", "chrom_data_full", "{chrom_id}.pickle"),
+        split_done=os.path.join(results_events_dir, "split.done")
     output:
         # Output will be determined dynamically (single vs multiple solutions)
-        touch(os.path.join(results_dir, "{wgd}", "full_paths_started", "{chrom_id}.done"))
+        touch(os.path.join(results_events_dir, "{wgd}", "full_paths_started", "{chrom_id}.done"))
     log:
         os.path.join(log_dir, "full_paths_{wgd}_{chrom_id}.log")
     threads: 1
@@ -375,7 +380,7 @@ rule full_paths:
             import spice
             spice.load_config(os.environ.get("SPICE_CONFIG"))
             from spice import config
-            from spice.data_loaders import resolve_data_file
+            from spice.data_loaders import resolve_copynumber_file
             from spice.utils import timeout
             from spice.event_inference.pipeline import full_paths_from_graph_with_sv_wrapper
             from spice.logging import configure_logging, get_logger
@@ -388,8 +393,15 @@ rule full_paths:
             )
             logger = get_logger('SPICE', spice_prefix=False)
             
-            chrom_segments_file = resolve_data_file()
+            chrom_segments_file = resolve_copynumber_file()
             is_wgd = (wildcards.wgd == 'wgd')
+            
+            output_file = os.path.join(
+                results_events_dir, wildcards.wgd,
+                'full_paths_multiple_solutions', f'{wildcards.chrom_id}.pickle'
+            )
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            os.makedirs(os.path.join(results_events_dir, wildcards.wgd, 'full_paths_single_solution'), exist_ok=True)
             
             # Temporarily disable timeout to debug
             # @timeout(config['params'].get('time_limit_all_solutions', None), mode="auto")
@@ -405,6 +417,7 @@ rule full_paths:
                     total_cn=config['params'].get('total_cn', False),
                     all_loh_solutions=config['params']['all_loh_solutions'],
                     save_output=True,
+                    output_file=output_file,
                     skip_loh_checks=True,
                 )
             
@@ -414,7 +427,7 @@ rule full_paths:
             print(f"ERROR in full_paths rule: {{e}}", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
             # Create marker file for MCMC fallback
-            fallback_dir = os.path.join(results_dir, wildcards.wgd, "full_paths_failed")
+            fallback_dir = os.path.join(results_events_dir, wildcards.wgd, "full_paths_failed")
             os.makedirs(fallback_dir, exist_ok=True)
             Path(os.path.join(fallback_dir, f"{{wildcards.chrom_id}}.failed")).touch()
             raise
@@ -422,9 +435,9 @@ rule full_paths:
 
 rule disambiguate_knn:
     input:
-        full_paths=os.path.join(results_dir, "{wgd}", "full_paths_multiple_solutions", "{chrom_id}.pickle")
+        full_paths=os.path.join(results_events_dir, "{wgd}", "full_paths_multiple_solutions", "{chrom_id}.pickle")
     output:
-        os.path.join(results_dir, "{wgd}", "knn_solved_chroms", "{chrom_id}.pickle")
+        os.path.join(results_events_dir, "{wgd}", "knn_solved_chroms", "{chrom_id}.pickle")
     log:
         os.path.join(log_dir, "disambiguate_{wgd}_{chrom_id}.log")
     threads: 1
@@ -441,7 +454,7 @@ rule disambiguate_knn:
         import spice
         spice.load_config(os.environ.get("SPICE_CONFIG"))
         from spice import config
-        from spice.data_loaders import resolve_data_file
+        from spice.data_loaders import resolve_copynumber_file
         from spice.event_inference.pipeline import solve_with_knn_wrapper
         from spice.logging import configure_logging, get_logger
         
@@ -453,12 +466,12 @@ rule disambiguate_knn:
         )
         logger = get_logger('SPICE', spice_prefix=False)
         
-        chrom_segments_file = resolve_data_file()
+        chrom_segments_file = resolve_copynumber_file()
         is_wgd = (wildcards.wgd == 'wgd')
         
         full_paths_multiple_solutions_dirs = [
-            os.path.join(results_dir, 'nowgd', 'full_paths_multiple_solutions'),
-            os.path.join(results_dir, 'wgd', 'full_paths_multiple_solutions')
+            os.path.join(results_events_dir, 'nowgd', 'full_paths_multiple_solutions'),
+            os.path.join(results_events_dir, 'wgd', 'full_paths_multiple_solutions')
         ]
         
         result = solve_with_knn_wrapper(
@@ -479,9 +492,9 @@ rule disambiguate_knn:
 
 rule mcmc_large:
     input:
-        chrom_data=os.path.join(results_dir, "{wgd}", "chrom_data_large", "{chrom_id}.pickle")
+        chrom_data=os.path.join(results_events_dir, "{wgd}", "chrom_data_large", "{chrom_id}.pickle")
     output:
-        os.path.join(results_dir, "{wgd}", "mcmc_solved_chroms_large", "{chrom_id}.pickle")
+        os.path.join(results_events_dir, "{wgd}", "mcmc_solved_chroms_large", "{chrom_id}.pickle")
     log:
         os.path.join(log_dir, "mcmc_large_{wgd}_{chrom_id}.log")
     threads: 1
@@ -498,7 +511,7 @@ rule mcmc_large:
         import spice
         spice.load_config(os.environ.get("SPICE_CONFIG"))
         from spice import config
-        from spice.data_loaders import resolve_data_file
+        from spice.data_loaders import resolve_copynumber_file
         from spice.utils import timeout, FunctionTimeoutError
         from spice.event_inference.pipeline import solve_with_mcmc_wrapper
         from spice.logging import configure_logging, get_logger
@@ -511,7 +524,7 @@ rule mcmc_large:
         )
         logger = get_logger('SPICE', spice_prefix=False)
         
-        chrom_segments_file = resolve_data_file()
+        chrom_segments_file = resolve_copynumber_file()
         is_wgd = (wildcards.wgd == 'wgd')
         
         # Timeout handled by Snakemake's runtime resource
@@ -535,6 +548,9 @@ rule mcmc_large:
             )
 
         skip_loh = config['params'].get('skip_loh_check_for_large_chroms', False)
+        try:
+            result = _solve_with_mcmc_wrapper(skip_loh_check=skip_loh)
+            logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC (large chrom)")
         except FunctionTimeoutError:
             logger.warning(
                 f'MCMC solving for {wildcards.chrom_id} timed out after {config["params"].get("time_limit_mcmc", None)} seconds. '
@@ -546,10 +562,10 @@ rule mcmc_large:
 
 rule mcmc_fallback:
     input:
-        failed_marker=os.path.join(results_dir, "{wgd}", "full_paths_failed", "{chrom_id}.failed"),
-        chrom_data=os.path.join(results_dir, "{wgd}", "chrom_data_full", "{chrom_id}.pickle")
+        failed_marker=os.path.join(results_events_dir, "{wgd}", "full_paths_failed", "{chrom_id}.failed"),
+        chrom_data=os.path.join(results_events_dir, "{wgd}", "chrom_data_full", "{chrom_id}.pickle")
     output:
-        os.path.join(results_dir, "{wgd}", "mcmc_solved_chroms_full", "{chrom_id}.pickle")
+        os.path.join(results_events_dir, "{wgd}", "mcmc_solved_chroms_full", "{chrom_id}.pickle")
     log:
         os.path.join(log_dir, "mcmc_fallback_{wgd}_{chrom_id}.log")
     threads: 1
@@ -566,7 +582,7 @@ rule mcmc_fallback:
         import spice
         spice.load_config(os.environ.get("SPICE_CONFIG"))
         from spice import config
-        from spice.data_loaders import resolve_data_file
+        from spice.data_loaders import resolve_copynumber_file
         from spice.utils import timeout, FunctionTimeoutError
         from spice.event_inference.pipeline import solve_with_mcmc_wrapper
         from spice.logging import configure_logging, get_logger
@@ -580,7 +596,7 @@ rule mcmc_fallback:
         logger = get_logger('SPICE', spice_prefix=False)
         logger.info(f"Running MCMC fallback for {{wildcards.chrom_id}} ({{wildcards.wgd}}) due to full_paths timeout")
         
-        chrom_segments_file = resolve_data_file()
+        chrom_segments_file = resolve_copynumber_file()
         is_wgd = (wildcards.wgd == 'wgd')
         
         # Timeout handled by Snakemake's runtime resource
@@ -618,9 +634,9 @@ rule mcmc_fallback:
 
 rule combine:
     input:
-        full_paths_done=os.path.join(results_dir, "full_paths_aggregate.done"),
-        mcmc_large_done=os.path.join(results_dir, "mcmc_large_aggregate.done"),
-        mcmc_fallback_done=os.path.join(results_dir, "mcmc_fallback_aggregate.done"),
+        full_paths_done=os.path.join(results_events_dir, "full_paths_aggregate.done"),
+        mcmc_large_done=os.path.join(results_events_dir, "mcmc_large_aggregate.done"),
+        mcmc_fallback_done=os.path.join(results_events_dir, "mcmc_fallback_aggregate.done"),
         knn_outputs=get_disambiguate_knn_outputs,
     output:
         os.path.join(results_dir, "final_events.tsv"),
@@ -640,7 +656,7 @@ rule combine:
         import spice
         spice.load_config(os.environ.get("SPICE_CONFIG"))
         from spice import config
-        from spice.data_loaders import resolve_data_file
+        from spice.data_loaders import resolve_copynumber_file
         from spice.event_inference.pipeline import combine_final_events
         from spice.logging import configure_logging, get_logger
         
@@ -652,13 +668,13 @@ rule combine:
         )
         logger = get_logger('SPICE', spice_prefix=False)
         
-        chrom_segments_file = resolve_data_file()
+        chrom_segments_file = resolve_copynumber_file()
         
         solved_dirs = (
-            [os.path.join(results_dir, wgd, 'knn_solved_chroms') for wgd in ['nowgd', 'wgd']] +
-            [os.path.join(results_dir, wgd, 'full_paths_single_solution') for wgd in ['nowgd', 'wgd']] +
-            [os.path.join(results_dir, wgd, 'mcmc_solved_chroms_full') for wgd in ['nowgd', 'wgd']] +
-            [os.path.join(results_dir, wgd, 'mcmc_solved_chroms_large') for wgd in ['nowgd', 'wgd']]
+            [os.path.join(results_events_dir, wgd, 'knn_solved_chroms') for wgd in ['nowgd', 'wgd']] +
+            [os.path.join(results_events_dir, wgd, 'full_paths_single_solution') for wgd in ['nowgd', 'wgd']] +
+            [os.path.join(results_events_dir, wgd, 'mcmc_solved_chroms_full') for wgd in ['nowgd', 'wgd']] +
+            [os.path.join(results_events_dir, wgd, 'mcmc_solved_chroms_large') for wgd in ['nowgd', 'wgd']]
         )
         
         combine_final_events(
