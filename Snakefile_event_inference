@@ -405,7 +405,7 @@ rule full_paths:
                     total_cn=config['params'].get('total_cn', False),
                     all_loh_solutions=config['params']['all_loh_solutions'],
                     save_output=True,
-                    skip_loh_checks=config['params'].get('skip_loh_check_for_large_chroms', False),
+                    skip_loh_checks=True,
                 )
             
             result = run_full_paths()
