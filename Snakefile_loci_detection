@@ -1,10 +1,17 @@
 """
 Snakemake workflow for loci detection (de-novo mode).
 Processes chromosomes in parallel to detect recurrent copy-number loci.
+
+Run locally:
+  SPICE_CONFIG=/path/to/config.yaml snakemake -s Snakefile_loci_detection --verbose -c4 --rerun-triggers mtime
+
+Run on Slurm:
+  SPICE_CONFIG=/path/to/config.yaml snakemake -s Snakefile_loci_detection --rerun-triggers mtime --verbose --slurm -j250 --keep-going
 """
 
 import os
 import sys
+import pandas as pd
 
 # Load config from environment variable
 config_path = os.environ.get('SPICE_CONFIG', 'config.yaml')
@@ -16,75 +23,124 @@ sys.path.insert(0, os.path.dirname(__file__))
 import spice
 spice.load_config(config_path)
 from spice import config
-from spice.utils import open_pickle
+from spice.utils import open_pickle, save_pickle
+from spice.data_loaders import load_final_events
+from spice.main_loci_functions import process_final_events_for_loci_routines
 
 # Extract key paths from config
 name = config['name']
 results_dir = os.path.join(config['directories']['results_dir'], name)
-analysis_dir = os.path.join(results_dir, 'loci_detection', 'de_novo')
 
-# Load final events to determine available chromosomes
-final_events_file = os.path.join(results_dir, 'final_events.pickle')
-if not os.path.exists(final_events_file):
-    raise FileNotFoundError(f"final_events.pickle not found at {final_events_file}. Run event_inference first.")
+# Match the CLI's loci_results_dir exactly so combine_loci() can find outputs
+loci_results_dir = os.path.join(results_dir, 'loci_of_selection')
 
-final_events_df, _, _, _, _ = open_pickle(final_events_file)
+# Per-chromosome results go into the 'detection' subdirectory (mode='detection')
+# This matches combine_loci(mode='detection') path: loci_results_dir/detection/{chrom}/
+analysis_dir = os.path.join(loci_results_dir, 'detection')
+
+# Read loci_detection parameters from config (filled from default_config.yaml defaults)
+loci_cfg = config['loci_detection']
+N_bootstrap = loci_cfg.get('N_bootstrap', 1000)
+N_kernel    = loci_cfg.get('N_kernel', 100_000)
+
+# Load final events from TSV (event_inference writes final_events.tsv, not .pickle)
+final_events_tsv = os.path.join(results_dir, 'final_events.tsv')
+if not os.path.exists(final_events_tsv):
+    raise FileNotFoundError(
+        f"final_events.tsv not found at {final_events_tsv}. Run event_inference first.")
+
+# Apply the same preprocessing as the CLI does before per-chrom analysis
+_raw_events = load_final_events()
+final_events_df = process_final_events_for_loci_routines(
+    final_events_df=_raw_events,
+    remove_plateaus=loci_cfg.get('remove_plateaus', True),
+    remove_chrY=loci_cfg.get('remove_chrY', True),
+    drop_duplicates=loci_cfg.get('drop_duplicates', True),
+    use_observed_centromeres=loci_cfg.get('use_observed_centromeres', True),
+)
 CHROMOSOMES = sorted(final_events_df['chrom'].unique())
 
 print(f"Loci detection workflow for {name}")
 print(f"Processing chromosomes: {CHROMOSOMES}")
+print(f"N_bootstrap={N_bootstrap}, N_kernel={N_kernel}")
+
 
 # Rule to define all outputs
 rule all:
     input:
-        expand(os.path.join(analysis_dir, 'final_selection_points', '{chrom}.pickle'), chrom=CHROMOSOMES),
-        os.path.join(analysis_dir, 'summary.txt')
+        os.path.join(loci_results_dir, 'final_loci_detection.tsv'),
+        os.path.join(loci_results_dir, 'summary.txt')
+
+
+rule bootstrap_signal:
+    output:
+        bootstrap=os.path.join(loci_results_dir, 'signal_bootstrap', '{chrom}_N_' + str(N_bootstrap) + '.pickle')
+    log:
+        os.path.join(loci_results_dir, 'logs', 'bootstrap_signal_{chrom}.log')
+    run:
+        import spice
+        from spice.utils import get_logger
+        from spice.tsg_og.signal_bootstrap import bootstrap_sampling_of_signal
+
+        logger = get_logger(f'bootstrap_signal_{wildcards.chrom}', load_config=False)
+        logger.info(f'Bootstrapping signal for {wildcards.chrom} (N={N_bootstrap})')
+
+        bootstrap_sampling_of_signal(
+            cur_chrom=wildcards.chrom,
+            final_events_df=final_events_df,
+            N_bootstrap=N_bootstrap,
+            calc_new_filename=output.bootstrap
+        )
+
+        logger.info(f'Bootstrap complete for {wildcards.chrom}')
 
 
 rule collect_data_per_length_scale:
+    input:
+        bootstrap=os.path.join(loci_results_dir, 'signal_bootstrap', '{chrom}_N_' + str(N_bootstrap) + '.pickle')
     output:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'collect_data_per_length_scale_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'collect_data_per_length_scale_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger
         from spice.tsg_og.detection import collect_data_per_length_scale
-        
+
         logger = get_logger(f'collect_data_per_length_scale_{wildcards.chrom}', load_config=False)
         logger.info(f'Collecting data per length scale for {wildcards.chrom}')
-        
+
         collect_data_per_length_scale(
             final_events_df,
             wildcards.chrom,
-            name=name,
+            loci_results_dir=loci_results_dir,
+            N_bootstrap=N_bootstrap,
+            N_kernel=N_kernel,
             calc_new_filename=output.data_file
         )
-        
+
         logger.info(f'Saved data per length scale to {output.data_file}')
 
 
 rule detection:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle')
     output:
-        loci=os.path.join(analysis_dir, 'detection', '{chrom}.pickle')
+        loci=os.path.join(analysis_dir, '{chrom}', 'detection.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'detection_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'detection_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import detect_tsgs_ogs_for_all_length_scales
-        
+
         logger = get_logger(f'detection_{wildcards.chrom}', load_config=False)
         logger.info(f'Running detection for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        
+
         detect_tsgs_ogs_for_all_length_scales(
             cur_chrom=wildcards.chrom,
-            output_dir=os.path.dirname(output.loci),
-            filename=os.path.basename(output.loci),
             blocked_distance_th=2e5,
             force_up_down=True,
             N_iterations_base=3000,
@@ -93,31 +149,34 @@ rule detection:
             N_loci=100,
             max_fitness=1_000,
             length_scales_for_residuals=[0, 1, 2, 3, 4, 5, 6, 7],
-            data_per_length_scale=data_per_length_scale
+            data_per_length_scale=data_per_length_scale,
+            calc_new_filename=output.loci
         )
-        
+
         logger.info(f'Detection complete for {wildcards.chrom}')
 
 
 rule flipping:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        detection=os.path.join(analysis_dir, 'detection', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        detection=os.path.join(analysis_dir, '{chrom}', 'detection.pickle')
     output:
-        flipped=os.path.join(analysis_dir, 'flipping', '{chrom}.pickle')
+        flipped=os.path.join(analysis_dir, '{chrom}', 'flipping.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'flipping_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'flipping_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import flip_up_down_assignment
-        
+
         logger = get_logger(f'flipping_{wildcards.chrom}', load_config=False)
         logger.info(f'Running flipping for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        detection_result = open_pickle(input.detection)
-        
+        # detect_tsgs_ogs_for_all_length_scales returns a 3-tuple; extract selection points
+        detection_tuple = open_pickle(input.detection)
+        detection_result = detection_tuple[0]
+
         flip_up_down_assignment(
             cur_chrom=wildcards.chrom,
             final_selection_points=detection_result,
@@ -125,32 +184,31 @@ rule flipping:
             n_neighbors=10,
             N_iterations=11_000,
             N_iterations_single=1_000,
-            output_dir=os.path.dirname(output.flipped),
-            filename=os.path.basename(output.flipped)
+            calc_new_filename=output.flipped
         )
-        
+
         logger.info(f'Flipping complete for {wildcards.chrom}')
 
 
 rule ranking:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        flipped=os.path.join(analysis_dir, 'flipping', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        flipped=os.path.join(analysis_dir, '{chrom}', 'flipping.pickle')
     output:
-        ranked=os.path.join(analysis_dir, 'ranking', '{chrom}.pickle')
+        ranked=os.path.join(analysis_dir, '{chrom}', 'ranking.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'ranking_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'ranking_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import rank_loci
-        
+
         logger = get_logger(f'ranking_{wildcards.chrom}', load_config=False)
         logger.info(f'Running ranking for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
         flipped_result = open_pickle(input.flipped)
-        
+
         rank_loci(
             cur_chrom=wildcards.chrom,
             best_selection_points=flipped_result,
@@ -158,68 +216,69 @@ rule ranking:
             show_progress=False,
             log_progress=True,
             force_up_down=True,
-            output_dir=os.path.dirname(output.ranked),
-            filename=os.path.basename(output.ranked),
             max_n_clusters=None,
             N_iterations=500,
             n_cores=1,
-            max_fitness=1_000
+            max_fitness=1_000,
+            calc_new_filename=output.ranked
         )
-        
+
         logger.info(f'Ranking complete for {wildcards.chrom}')
 
 
 rule within_ci_filtering:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        ranked=os.path.join(analysis_dir, 'ranking', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        ranked=os.path.join(analysis_dir, '{chrom}', 'ranking.pickle')
     output:
-        filtered=os.path.join(analysis_dir, 'within_ci_filtering', '{chrom}.pickle')
+        filtered=os.path.join(analysis_dir, '{chrom}', 'within_ci_filtering.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'within_ci_filtering_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'within_ci_filtering_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import within_ci_fitness_filter
-        
+
         logger = get_logger(f'within_ci_filtering_{wildcards.chrom}', load_config=False)
         logger.info(f'Running within_ci_filtering for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        ranked_result = open_pickle(input.ranked)
-        
+        # rank_loci returns optimized_locus_iterations: list of (selection_points, loss, cluster_i)
+        # Extract the final selection points from the last iteration
+        ranking_locus_iterations = open_pickle(input.ranked)
+        ranked_result = ranking_locus_iterations[-1][0]
+
         within_ci_fitness_filter(
             cur_chrom=wildcards.chrom,
             ranked_selection_points=ranked_result,
             data_per_length_scale=data_per_length_scale,
             show_progress=False,
             log_progress=True,
-            output_dir=os.path.dirname(output.filtered),
-            filename=os.path.basename(output.filtered)
+            calc_new_filename=output.filtered
         )
-        
+
         logger.info(f'Within CI filtering complete for {wildcards.chrom}')
 
 
 rule limiting:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        filtered=os.path.join(analysis_dir, 'within_ci_filtering', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        filtered=os.path.join(analysis_dir, '{chrom}', 'within_ci_filtering.pickle')
     output:
-        limited=os.path.join(analysis_dir, 'limiting', '{chrom}.pickle')
+        limited=os.path.join(analysis_dir, '{chrom}', 'limiting.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'limiting_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'limiting_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import limiting_fitness
-        
+
         logger = get_logger(f'limiting_{wildcards.chrom}', load_config=False)
         logger.info(f'Running limiting for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
         filtered_result = open_pickle(input.filtered)
-        
+
         limiting_fitness(
             cur_chrom=wildcards.chrom,
             raw_selection_points=filtered_result,
@@ -232,105 +291,105 @@ rule limiting:
             show_progress=False,
             loss_threshold=0.25,
             within_ci_threshold=0.025,
-            output_dir=os.path.dirname(output.limited),
-            filename=os.path.basename(output.limited)
+            calc_new_filename=output.limited
         )
-        
+
         logger.info(f'Limiting complete for {wildcards.chrom}')
 
 
 rule optimizing_intermediate:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        limited=os.path.join(analysis_dir, 'limiting', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        limited=os.path.join(analysis_dir, '{chrom}', 'limiting.pickle')
     output:
-        optimized=os.path.join(analysis_dir, 'optimizing_intermediate', '{chrom}.pickle')
+        optimized=os.path.join(analysis_dir, '{chrom}', 'optimizing_intermediate.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'optimizing_intermediate_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'optimizing_intermediate_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import final_optimization_step
-        
+
         logger = get_logger(f'optimizing_intermediate_{wildcards.chrom}', load_config=False)
         logger.info(f'Running optimizing_intermediate for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
         limited_result = open_pickle(input.limited)
-        
+
         final_optimization_step(
             cur_chrom=wildcards.chrom,
             final_selection_points=limited_result,
             data_per_length_scale=data_per_length_scale,
-            output_dir=os.path.dirname(output.optimized),
-            filename=os.path.basename(output.optimized),
             n_neighbors_optimization=10,
             N_iterations_optimization=11_000,
-            max_pos_change=1e5
+            max_pos_change=1e5,
+            calc_new_filename=output.optimized
         )
-        
+
         logger.info(f'Optimizing intermediate complete for {wildcards.chrom}')
 
 
 rule loci_widths_intermediate:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        optimized=os.path.join(analysis_dir, 'optimizing_intermediate', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        optimized=os.path.join(analysis_dir, '{chrom}', 'optimizing_intermediate.pickle')
     output:
-        widths=os.path.join(analysis_dir, 'loci_widths_intermediate', '{chrom}.pickle')
+        widths=os.path.join(analysis_dir, '{chrom}', 'loci_widths_intermediate.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'loci_widths_intermediate_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'loci_widths_intermediate_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import infer_loci_widths
-        
+
         logger = get_logger(f'loci_widths_intermediate_{wildcards.chrom}', load_config=False)
         logger.info(f'Running loci_widths_intermediate for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        optimized_result = open_pickle(input.optimized)
-        
-        data_loaders_dir = os.path.join(results_dir, 'data_loaders', name)
-        
+        # final_optimization_step returns a 2-tuple (selection_points, losses); extract sp
+        optimized_tuple = open_pickle(input.optimized)
+        optimized_result = optimized_tuple[0]
+
         infer_loci_widths(
             cur_chrom=wildcards.chrom,
             final_selection_points=optimized_result,
-            data_loaders_dir=data_loaders_dir,
+            loci_results_dir=loci_results_dir,
             data_per_length_scale=data_per_length_scale,
+            N_bootstrap=N_bootstrap,
             num_bootstrap_iterations=200,
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
             n_jobs=1,
-            output_dir=os.path.dirname(output.widths),
-            filename=os.path.basename(output.widths)
+            calc_new_filename=output.widths
         )
-        
+
         logger.info(f'Locus widths intermediate complete for {wildcards.chrom}')
 
 
 rule merging:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        optimized=os.path.join(analysis_dir, 'optimizing_intermediate', '{chrom}.pickle'),
-        widths=os.path.join(analysis_dir, 'loci_widths_intermediate', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        optimized=os.path.join(analysis_dir, '{chrom}', 'optimizing_intermediate.pickle'),
+        widths=os.path.join(analysis_dir, '{chrom}', 'loci_widths_intermediate.pickle')
     output:
-        merged=os.path.join(analysis_dir, 'merging', '{chrom}.pickle')
+        merged=os.path.join(analysis_dir, '{chrom}', 'merging.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'merging_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'merging_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import merge_overlapping_loci
-        
+
         logger = get_logger(f'merging_{wildcards.chrom}', load_config=False)
         logger.info(f'Running merging for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        optimized_result = open_pickle(input.optimized)
+        # final_optimization_step returns a 2-tuple; extract selection points
+        optimized_tuple = open_pickle(input.optimized)
+        optimized_result = optimized_tuple[0]
         widths_result = open_pickle(input.widths)
-        
+
         merge_overlapping_loci(
             cur_chrom=wildcards.chrom,
             selection_points=optimized_result,
@@ -339,105 +398,107 @@ rule merging:
             n_iterations_optim=10_000,
             show_progress_optim=False,
             max_deviation_optim=0.00001,
-            output_dir=os.path.dirname(output.merged),
-            filename=os.path.basename(output.merged)
+            calc_new_filename=output.merged
         )
-        
+
         logger.info(f'Merging complete for {wildcards.chrom}')
 
 
 rule optimizing:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        merged=os.path.join(analysis_dir, 'merging', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        merged=os.path.join(analysis_dir, '{chrom}', 'merging.pickle')
     output:
-        optimized=os.path.join(analysis_dir, 'optimizing', '{chrom}.pickle')
+        optimized=os.path.join(analysis_dir, '{chrom}', 'optimizing.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'optimizing_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'optimizing_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import final_optimization_step
-        
+
         logger = get_logger(f'optimizing_{wildcards.chrom}', load_config=False)
         logger.info(f'Running optimizing for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        merged_result = open_pickle(input.merged)
-        
+        # merge_overlapping_loci returns a 4-tuple; extract selection points
+        merged_tuple = open_pickle(input.merged)
+        merged_result = merged_tuple[0]
+
         final_optimization_step(
             cur_chrom=wildcards.chrom,
             final_selection_points=merged_result,
             data_per_length_scale=data_per_length_scale,
-            output_dir=os.path.dirname(output.optimized),
-            filename=os.path.basename(output.optimized),
             n_neighbors_optimization=10,
             N_iterations_optimization=11_000,
-            max_pos_change=1e5
+            max_pos_change=1e5,
+            calc_new_filename=output.optimized
         )
-        
+
         logger.info(f'Optimizing complete for {wildcards.chrom}')
 
 
 rule loci_widths_intermediate_2:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        optimized=os.path.join(analysis_dir, 'optimizing', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        optimized=os.path.join(analysis_dir, '{chrom}', 'optimizing.pickle')
     output:
-        widths=os.path.join(analysis_dir, 'loci_widths_intermediate_2', '{chrom}.pickle')
+        widths=os.path.join(analysis_dir, '{chrom}', 'loci_widths_intermediate_2.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'loci_widths_intermediate_2_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'loci_widths_intermediate_2_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import infer_loci_widths
-        
+
         logger = get_logger(f'loci_widths_intermediate_2_{wildcards.chrom}', load_config=False)
         logger.info(f'Running loci_widths_intermediate_2 for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        optimized_result = open_pickle(input.optimized)
-        
-        data_loaders_dir = os.path.join(results_dir, 'data_loaders', name)
-        
+        # final_optimization_step returns a 2-tuple; extract selection points
+        optimized_tuple = open_pickle(input.optimized)
+        optimized_result = optimized_tuple[0]
+
         infer_loci_widths(
             cur_chrom=wildcards.chrom,
             final_selection_points=optimized_result,
-            data_loaders_dir=data_loaders_dir,
+            loci_results_dir=loci_results_dir,
             data_per_length_scale=data_per_length_scale,
+            N_bootstrap=N_bootstrap,
             num_bootstrap_iterations=200,
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
             n_jobs=1,
-            output_dir=os.path.dirname(output.widths),
-            filename=os.path.basename(output.widths)
+            calc_new_filename=output.widths
         )
-        
+
         logger.info(f'Locus widths intermediate 2 complete for {wildcards.chrom}')
 
 
 rule filter_loci_intermediate_1:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        optimized=os.path.join(analysis_dir, 'optimizing', '{chrom}.pickle'),
-        widths=os.path.join(analysis_dir, 'loci_widths_intermediate_2', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        optimized=os.path.join(analysis_dir, '{chrom}', 'optimizing.pickle'),
+        widths=os.path.join(analysis_dir, '{chrom}', 'loci_widths_intermediate_2.pickle')
     output:
-        filtered=os.path.join(analysis_dir, 'filter_loci_intermediate_1', '{chrom}.pickle')
+        filtered=os.path.join(analysis_dir, '{chrom}', 'filter_loci_intermediate_1.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'filter_loci_intermediate_1_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'filter_loci_intermediate_1_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import filter_loci
-        
+
         logger = get_logger(f'filter_loci_intermediate_1_{wildcards.chrom}', load_config=False)
         logger.info(f'Running filter_loci_intermediate_1 for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
-        optimized_result = open_pickle(input.optimized)
+        # final_optimization_step returns a 2-tuple; extract selection points
+        optimized_tuple = open_pickle(input.optimized)
+        optimized_result = optimized_tuple[0]
         widths_result = open_pickle(input.widths)
-        
+
         filter_loci(
             cur_chrom=wildcards.chrom,
             final_selection_points=optimized_result,
@@ -447,32 +508,31 @@ rule filter_loci_intermediate_1:
             n_iterations_optim=100_000,
             show_progress_optim=False,
             max_deviation_optim=0.00001,
-            output_dir=os.path.dirname(output.filtered),
-            filename=os.path.basename(output.filtered)
+            calc_new_filename=output.filtered
         )
-        
+
         logger.info(f'Filter loci intermediate 1 complete for {wildcards.chrom}')
 
 
 rule final_within_ci_filtering:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        filtered=os.path.join(analysis_dir, 'filter_loci_intermediate_1', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        filtered=os.path.join(analysis_dir, '{chrom}', 'filter_loci_intermediate_1.pickle')
     output:
-        final_filtered=os.path.join(analysis_dir, 'final_within_ci_filtering', '{chrom}.pickle')
+        final_filtered=os.path.join(analysis_dir, '{chrom}', 'final_within_ci_filtering.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'final_within_ci_filtering_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'final_within_ci_filtering_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import within_ci_fitness_filter
-        
+
         logger = get_logger(f'final_within_ci_filtering_{wildcards.chrom}', load_config=False)
         logger.info(f'Running final_within_ci_filtering for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
         filtered_result = open_pickle(input.filtered)
-        
+
         within_ci_fitness_filter(
             cur_chrom=wildcards.chrom,
             ranked_selection_points=filtered_result,
@@ -480,32 +540,31 @@ rule final_within_ci_filtering:
             remove_empty_loci=False,
             show_progress=False,
             log_progress=True,
-            output_dir=os.path.dirname(output.final_filtered),
-            filename=os.path.basename(output.final_filtered)
+            calc_new_filename=output.final_filtered
         )
-        
+
         logger.info(f'Final within CI filtering complete for {wildcards.chrom}')
 
 
 rule final_filter_loci:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        filtered=os.path.join(analysis_dir, 'final_within_ci_filtering', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        filtered=os.path.join(analysis_dir, '{chrom}', 'final_within_ci_filtering.pickle')
     output:
-        final_loci=os.path.join(analysis_dir, 'final_filter_loci', '{chrom}.pickle')
+        final_loci=os.path.join(analysis_dir, '{chrom}', 'final_filter_loci.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'final_filter_loci_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'final_filter_loci_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import filter_loci
-        
+
         logger = get_logger(f'final_filter_loci_{wildcards.chrom}', load_config=False)
         logger.info(f'Running final_filter_loci for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
         filtered_result = open_pickle(input.filtered)
-        
+
         filter_loci(
             cur_chrom=wildcards.chrom,
             final_selection_points=filtered_result,
@@ -515,32 +574,31 @@ rule final_filter_loci:
             n_iterations_optim=100_000,
             show_progress_optim=False,
             max_deviation_optim=0.00001,
-            output_dir=os.path.dirname(output.final_loci),
-            filename=os.path.basename(output.final_loci)
+            calc_new_filename=output.final_loci
         )
-        
+
         logger.info(f'Final filter loci complete for {wildcards.chrom}')
 
 
 rule final_limiting:
     input:
-        data_file=os.path.join(analysis_dir, 'data_per_length_scale', '{chrom}.pickle'),
-        loci=os.path.join(analysis_dir, 'final_filter_loci', '{chrom}.pickle')
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        loci=os.path.join(analysis_dir, '{chrom}', 'final_filter_loci.pickle')
     output:
-        final_limited=os.path.join(analysis_dir, 'final_limiting', '{chrom}.pickle')
+        final_limited=os.path.join(analysis_dir, '{chrom}', 'final_limiting.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'final_limiting_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'final_limiting_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle
         from spice.tsg_og.detection import limiting_fitness
-        
+
         logger = get_logger(f'final_limiting_{wildcards.chrom}', load_config=False)
         logger.info(f'Running final_limiting for {wildcards.chrom}')
-        
+
         data_per_length_scale = open_pickle(input.data_file)
         loci_result = open_pickle(input.loci)
-        
+
         limiting_fitness(
             cur_chrom=wildcards.chrom,
             raw_selection_points=loci_result,
@@ -554,53 +612,123 @@ rule final_limiting:
             loss_threshold=0.125,
             within_ci_threshold=0.01,
             ls_i_to_check=(6, 7),
-            output_dir=os.path.dirname(output.final_limited),
-            filename=os.path.basename(output.final_limited)
+            calc_new_filename=output.final_limited
         )
-        
+
         logger.info(f'Final limiting complete for {wildcards.chrom}')
 
 
 rule final_selection_points:
     input:
-        final_limited=os.path.join(analysis_dir, 'final_limiting', '{chrom}.pickle')
+        final_limited=os.path.join(analysis_dir, '{chrom}', 'final_limiting.pickle')
     output:
-        selection_points=os.path.join(analysis_dir, 'final_selection_points', '{chrom}.pickle')
+        selection_points=os.path.join(analysis_dir, '{chrom}', 'final_selection_points.pickle')
     log:
-        os.path.join(analysis_dir, 'logs', 'final_selection_points_{chrom}.log')
+        os.path.join(loci_results_dir, 'logs', 'final_selection_points_{chrom}.log')
     run:
         import spice
         from spice.utils import get_logger, open_pickle, save_pickle
         from spice.tsg_og.simulation import copy_list_of_selection_points
-        
+
         logger = get_logger(f'final_selection_points_{wildcards.chrom}', load_config=False)
         logger.info(f'Creating final selection points for {wildcards.chrom}')
-        
+
         final_limited_result = open_pickle(input.final_limited)
-        final_selection_points = copy_list_of_selection_points(final_limited_result)
-        save_pickle(final_selection_points, output.selection_points)
-        
+        final_sp = copy_list_of_selection_points(final_limited_result)
+        save_pickle(final_sp, output.selection_points)
+
         logger.info(f'Final selection points saved for {wildcards.chrom}')
 
 
-rule summary:
+rule final_loci_widths:
+    input:
+        data_file=os.path.join(loci_results_dir, 'data_per_length_scale', '{chrom}.pickle'),
+        selection_points=os.path.join(analysis_dir, '{chrom}', 'final_selection_points.pickle')
+    output:
+        widths=os.path.join(analysis_dir, '{chrom}', 'final_loci_widths.pickle')
+    log:
+        os.path.join(loci_results_dir, 'logs', 'final_loci_widths_{chrom}.log')
+    run:
+        import spice
+        from spice.utils import get_logger, open_pickle
+        from spice.tsg_og.detection import infer_loci_widths
+
+        logger = get_logger(f'final_loci_widths_{wildcards.chrom}', load_config=False)
+        logger.info(f'Running final_loci_widths for {wildcards.chrom}')
+
+        data_per_length_scale = open_pickle(input.data_file)
+        selection_points = open_pickle(input.selection_points)
+
+        infer_loci_widths(
+            cur_chrom=wildcards.chrom,
+            final_selection_points=selection_points,
+            loci_results_dir=loci_results_dir,
+            data_per_length_scale=data_per_length_scale,
+            N_bootstrap=N_bootstrap,
+            num_bootstrap_iterations=200,
+            max_pos_change=1e5,
+            max_deviation=0.00001,
+            num_optimization_iterations=1_000,
+            n_jobs=1,
+            calc_new_filename=output.widths
+        )
+
+        logger.info(f'Final loci widths complete for {wildcards.chrom}')
+
+
+rule combine:
     input:
         selection_points=expand(
-            os.path.join(analysis_dir, 'final_selection_points', '{chrom}.pickle'),
+            os.path.join(analysis_dir, '{chrom}', 'final_selection_points.pickle'),
+            chrom=CHROMOSOMES
+        ),
+        loci_widths=expand(
+            os.path.join(analysis_dir, '{chrom}', 'final_loci_widths.pickle'),
             chrom=CHROMOSOMES
         )
     output:
-        summary=os.path.join(analysis_dir, 'summary.txt')
+        tsv=os.path.join(loci_results_dir, 'final_loci_detection.tsv'),
+        summary=os.path.join(loci_results_dir, 'summary.txt')
+    log:
+        os.path.join(loci_results_dir, 'logs', 'combine.log')
     run:
-        logger = spice.utils.get_logger('summary', load_config=False)
-        logger.info(f'Generating summary for {name}')
-        
+        import spice
+        from spice.utils import get_logger, save_pickle
+        from spice.main_loci_functions import combine_loci
+
+        logger = get_logger('combine', load_config=False)
+        logger.info(f'Combining all loci detection results for {name}')
+
+        cur_loci_cfg = config['loci_detection']
+        final_loci_df, filtered_sp, filtered_widths = combine_loci(
+            loci_results_dir=loci_results_dir,
+            processed_events=final_events_df,
+            calculate_p_value=cur_loci_cfg.get('calculate_p_value', True),
+            p_values_N_random=cur_loci_cfg.get('p_values_N_random', 1000),
+            p_values_N_iterations=cur_loci_cfg.get('p_values_N_iterations', 1000),
+            post_p_value_N_iterations=cur_loci_cfg.get('post_p_value_N_iterations', 25_000),
+            p_value_threshold=cur_loci_cfg.get('p_value_threshold', 0.05),
+            overwrite=False,
+            mode='detection',
+        )
+
+        final_loci_df.to_csv(output.tsv, sep='\t', index=True)
+        save_pickle(
+            filtered_sp,
+            os.path.join(loci_results_dir, 'detection', 'final_loci_detection_filtered.pickle')
+        )
+        save_pickle(
+            filtered_widths,
+            os.path.join(loci_results_dir, 'detection', 'final_loci_detection_filtered_widths.pickle')
+        )
+
         with open(output.summary, 'w') as f:
             f.write(f'Loci Detection De-Novo Summary\n')
             f.write(f'Project: {name}\n')
-            f.write(f'Analysis directory: {analysis_dir}\n')
+            f.write(f'Analysis directory: {loci_results_dir}\n')
             f.write(f'Chromosomes processed: {len(CHROMOSOMES)}\n')
             f.write(f'Chromosomes: {", ".join(CHROMOSOMES)}\n')
-            f.write(f'\nFinal selection points saved to: {analysis_dir}/final_selection_points/\n')
-        
+            f.write(f'Total loci detected: {len(final_loci_df)}\n')
+            f.write(f'\nResults saved to: {output.tsv}\n')
+
         logger.info(f'Summary written to {output.summary}')
