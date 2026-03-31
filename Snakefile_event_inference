@@ -708,8 +708,6 @@ rule combine:
             chrom_segments_file=chrom_segments_file,
             sv_data=config['input_files'].get('sv', None),
             sv_matching_threshold=config['params']['sv_matching_threshold'],
-            knn_train_data=None,
-            knn_k=config['params']['knn_k'],
             output_dir=results_dir,
         )
         

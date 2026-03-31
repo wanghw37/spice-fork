@@ -657,6 +657,24 @@ def get_event_dist_data_from_mcmc_proposal(
     # event_proposal_sorted swaps start and end for losses so start is always smaller than end
     event_proposal_sorted = np.sort(event_proposal, axis=1)
 
+    # Validate all event indices are within bounds before indexing.
+    # Out-of-bounds indices arise for the same root cause as zero-width events: WGD proposal
+    # functions can generate events with start_idx == n_segments (pointing past the last
+    # segment), causing IndexError on the array access below.  Catching them here lets
+    # calc_event_distances_mcmc_wrapper treat the proposal as invalid and skip the iteration.
+    n_segs = len(cur_segment_breakpoints_starts)
+    out_of_bounds = (
+        (event_proposal_sorted[:, 0] >= n_segs)
+        | ((event_proposal_sorted[:, 1] - 1) >= n_segs)
+        | ((event_proposal_sorted[:, 1] - 1) < 0)
+    )
+    if out_of_bounds.any():
+        bad_events = event_proposal[out_of_bounds]
+        raise ZeroWidthEventError(
+            f"Event index out of bounds: "
+            f"events={bad_events.tolist()}, n_segments={n_segs}"
+        )
+
     starts = cur_segment_breakpoints_starts[event_proposal_sorted[:, 0]]
     ends = cur_segment_breakpoints_ends[event_proposal_sorted[:, 1] - 1]
     widths = ends - starts
