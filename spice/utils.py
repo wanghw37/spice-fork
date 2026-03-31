@@ -1,4 +1,3 @@
-
 import logging
 import os
 import pickle
@@ -15,8 +14,9 @@ import numpy as np
 
 from spice.logging import get_logger, log_debug
 
+
 def chrom_id_from_id(cur_id):
-    return re.sub(r':cn_[ab](:\d+$)?', '', cur_id)
+    return re.sub(r":cn_[ab](:\d+$)?", "", cur_id)
 
 
 def get_sister_allele(cur_id):
@@ -25,9 +25,11 @@ def get_sister_allele(cur_id):
     else:
         return cur_id.replace("cn_b", "cn_a")
 
-class CALC_NEW_SKIP():
+
+class CALC_NEW_SKIP:
     def __repr__(self):
-        return 'CALC_NEW skip signal'
+        return "CALC_NEW skip signal"
+
     def __eq__(self, other):
         return other is None
 
@@ -36,69 +38,80 @@ class CALC_NEW:
     def __init__(self, filename=None, force_new=False, verbose=True):
         self.filename = filename
         self.force_new = force_new
-        self.logger = logging.getLogger('CALC_NEW')
+        self.logger = logging.getLogger("CALC_NEW")
         if verbose:
             self.logger.setLevel(logging.INFO)
         else:
             self.logger.setLevel(logging.WARNING)
 
-
     def __call__(self, func):
         def wrapper(*args, **kwargs):
 
-            self.result = None
-            self.save_data = True
+            # Use local variables (not instance attributes) so that concurrent
+            # calls from parallel Snakemake run: blocks (threads) do not race
+            # on shared state.  Previously self.result / self.save_data were
+            # instance attributes, which caused data corruption when multiple
+            # chromosomes were bootstrapped simultaneously.
+            result = None
+            save_data = True  # noqa: F841 – kept for symmetry, may be used later
 
-            if 'calc_new_filename' in kwargs:
-                filename = kwargs['calc_new_filename']
-                del kwargs['calc_new_filename']
+            if "calc_new_filename" in kwargs:
+                filename = kwargs["calc_new_filename"]
+                del kwargs["calc_new_filename"]
             else:
                 filename = self.filename
-            if 'calc_new_force_new' in kwargs:
-                force_new = kwargs['calc_new_force_new']
-                del kwargs['calc_new_force_new']
+            if "calc_new_force_new" in kwargs:
+                force_new = kwargs["calc_new_force_new"]
+                del kwargs["calc_new_force_new"]
             else:
                 force_new = self.force_new
-            if 'calc_new_verbose' in kwargs:
-                if kwargs['calc_new_verbose']:
+            if "calc_new_verbose" in kwargs:
+                if kwargs["calc_new_verbose"]:
                     self.logger.setLevel(logging.INFO)
                 else:
                     self.logger.setLevel(logging.WARNING)
-                del kwargs['calc_new_verbose']
+                del kwargs["calc_new_verbose"]
 
             if filename is None:
                 log_debug(self.logger, f"File path is None, ignoring calc_new")
-                self.result = func(*args, **kwargs)
-                return self.result
+                result = func(*args, **kwargs)
+                return result
             else:
                 if os.path.exists(filename):
                     if not force_new:
                         log_debug(self.logger, f"Data exists at '{filename}'")
-                        self.save_data = False
+                        save_data = False
                         log_debug(self.logger, f"Loading data")
-                        with open(filename, 'rb') as f:
-                            self.result = pickle.load(f)
-                        return self.result
+                        with open(filename, "rb") as f:
+                            result = pickle.load(f)
+                        return result
                     else:
-                        log_debug(self.logger, f"Data exists at but forcing recalculation for '{filename}'")
-                        self.result = None
+                        log_debug(
+                            self.logger,
+                            f"Data exists at but forcing recalculation for '{filename}'",
+                        )
+                        result = None
                 else:
                     log_debug(self.logger, f"Data does not exist at {filename}")
 
-                if self.result is None:
-                    self.result = func(*args, **kwargs)
-                    if isinstance(self.result, CALC_NEW_SKIP):
-                        log_debug(self.logger, f"Function returned skip signal, not saving data")
-                        self.save_data = False
-                        self.result = None
+                if result is None:
+                    result = func(*args, **kwargs)
+                    if isinstance(result, CALC_NEW_SKIP):
+                        log_debug(
+                            self.logger,
+                            f"Function returned skip signal, not saving data",
+                        )
+                        save_data = False
+                        result = None
                     else:
                         log_debug(self.logger, f"Save data to {filename}")
                         if not os.path.exists(os.path.dirname(filename)):
                             os.makedirs(os.path.dirname(filename), exist_ok=True)
-                        with open(filename, 'wb') as f:
-                            pickle.dump(self.result, f)
+                        with open(filename, "wb") as f:
+                            pickle.dump(result, f)
 
-                return self.result
+                return result
+
         return wrapper
 
 
@@ -106,28 +119,37 @@ def assert_close(a, b):
     assert np.isclose(a, b), print(f"{a} - {b} = {a - b}")
 
 
-def open_pickle(filename, n_elements=None, fail_if_nonexisting=True,
-                fail_for_other_errors=True, data_type=None):
+def open_pickle(
+    filename,
+    n_elements=None,
+    fail_if_nonexisting=True,
+    fail_for_other_errors=True,
+    data_type=None,
+):
 
     if not fail_if_nonexisting and not os.path.exists(filename):
-        local_logger = get_logger('utils')
-        local_logger.warning('File does not exist, returning None')
+        local_logger = get_logger("utils")
+        local_logger.warning("File does not exist, returning None")
         return None
     try:
-        with open(filename, 'rb') as f:
+        with open(filename, "rb") as f:
             data = pickle.load(f)
     except Exception as e:
         if isinstance(e, FileNotFoundError):
             if fail_if_nonexisting:
                 raise Exception(f"File {filename} was not found:\n{str(e)}")
         elif fail_for_other_errors:
-            raise Exception(f"Opening pickle {filename} failed with error code:\n{str(e)}")
+            raise Exception(
+                f"Opening pickle {filename} failed with error code:\n{str(e)}"
+            )
         data = None
-    if n_elements is not None and not hasattr(data, '__len__') and data is None:
+    if n_elements is not None and not hasattr(data, "__len__") and data is None:
         data = tuple([None] * n_elements)
 
     if data_type is not None:
-        assert isinstance(data, data_type), f"Data type is {type(data)}, expected {data_type}"
+        assert isinstance(data, data_type), (
+            f"Data type is {type(data)}, expected {data_type}"
+        )
 
     return data
 
@@ -137,46 +159,62 @@ def save_pickle(obj, filename, create_dir_if_not_exists=True):
     if create_dir_if_not_exists and not os.path.exists(os.path.dirname(filename)):
         os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-    with open(filename, 'wb') as f:
+    with open(filename, "wb") as f:
         pickle.dump(obj, f)
 
 
 def linkage_order(data):
     import scipy.cluster.hierarchy as shc
-    linkage = shc.linkage(data, method='ward')
+
+    linkage = shc.linkage(data, method="ward")
     dend = shc.dendrogram(linkage, no_plot=True)
 
-    return dend['leaves']
+    return dend["leaves"]
 
 
 # TODO: Create to events_from_graph?
-def create_full_df_from_diff_df(df, cur_id, cur_chrom_segments, chrom_lengths=None,
-                                calc_telomere_bound=True):
+def create_full_df_from_diff_df(
+    df, cur_id, cur_chrom_segments, chrom_lengths=None, calc_telomere_bound=True
+):
     if chrom_lengths is None:
         from spice.data_loaders import load_chrom_lengths
+
         chrom_lengths = load_chrom_lengths()
-    cur_chrom_segments = cur_chrom_segments.query('id == @cur_id')
+    cur_chrom_segments = cur_chrom_segments.query("id == @cur_id")
 
     df = df.copy()
-    df['id'] = cur_id
-    df[['sample', 'chrom', 'allele']] = cur_id.split(':')
-    df['chrom_length'] = chrom_lengths.loc[df['chrom'].values[0]]
-    df['chrom_id'] = cur_id[:cur_id.rfind(':')]
-    df['start'] = cur_chrom_segments['start'].values[df['diff'].map(lambda x: x.find('1')).values]
-    df['end'] = cur_chrom_segments['end'].values[df['diff'].map(lambda x: x.rfind('1')).values]
+    df["id"] = cur_id
+    df[["sample", "chrom", "allele"]] = cur_id.split(":")
+    df["chrom_length"] = chrom_lengths.loc[df["chrom"].values[0]]
+    df["chrom_id"] = cur_id[: cur_id.rfind(":")]
+    df["start"] = cur_chrom_segments["start"].values[
+        df["diff"].map(lambda x: x.find("1")).values
+    ]
+    df["end"] = cur_chrom_segments["end"].values[
+        df["diff"].map(lambda x: x.rfind("1")).values
+    ]
     # width cannot simply be end - start because of LOH-shortened events
-    df['total_loh_gaps'] = [cur_chrom_segments.eval('end - start').values[
-        diff.find('1'):diff.rfind('1')][
-            np.fromiter(diff[diff.find('1'):diff.rfind('1')], int) == 0].sum() for diff in df['diff'].values]
-    df['width'] = df.eval('(end - start) - total_loh_gaps')
-    
+    df["total_loh_gaps"] = [
+        cur_chrom_segments.eval("end - start")
+        .values[diff.find("1") : diff.rfind("1")][
+            np.fromiter(diff[diff.find("1") : diff.rfind("1")], int) == 0
+        ]
+        .sum()
+        for diff in df["diff"].values
+    ]
+    df["width"] = df.eval("(end - start) - total_loh_gaps")
+
     if calc_telomere_bound:
-        df[['telomere_bound', 'whole_arm', 'whole_chrom']] = np.stack(calc_telomere_bound_whole_arm_whole_chrom(df), axis=1)
-       
-    if 'is_gain' in df.columns:
-        df['type'] = df['is_gain'].map({True: 'gain', False: 'loss'})
-    if 'type' in df.columns:
-        df['type_diff'] = df[['type', 'diff']].apply(lambda x: f'{x["type"]}:{x["diff"]}', axis=1)
+        df[["telomere_bound", "whole_arm", "whole_chrom"]] = np.stack(
+            calc_telomere_bound_whole_arm_whole_chrom(df), axis=1
+        )
+
+    if "is_gain" in df.columns:
+        df["type"] = df["is_gain"].map({True: "gain", False: "loss"})
+    if "type" in df.columns:
+        df["type_diff"] = df[["type", "diff"]].apply(
+            lambda x: f"{x['type']}:{x['diff']}", axis=1
+        )
 
     return df
 
@@ -199,22 +237,32 @@ def calc_telomere_bound_whole_arm_whole_chrom(data, return_left_and_right=False)
         (~whole_chrom),
         np.logical_or(
             np.logical_and(telomere_bound_l, centromere_bound_r),
-            np.logical_and(telomere_bound_r, centromere_bound_l)
-        )
+            np.logical_and(telomere_bound_r, centromere_bound_l),
+        ),
     )
     if return_left_and_right:
-        return centromere_bound_l, centromere_bound_r, telomere_bound_l, telomere_bound_r, telomere_bound, whole_arm, whole_chrom
+        return (
+            centromere_bound_l,
+            centromere_bound_r,
+            telomere_bound_l,
+            telomere_bound_r,
+            telomere_bound,
+            whole_arm,
+            whole_chrom,
+        )
     else:
         return telomere_bound, whole_arm, whole_chrom
 
 
 def calc_telomere_bound_left_and_right(data):
     if isinstance(data, pd.DataFrame):
-        telomere_bound_l = data['diff'].astype(str).str.startswith('1').values
-        telomere_bound_r = data['diff'].astype(str).str.endswith('1').values
+        telomere_bound_l = data["diff"].astype(str).str.startswith("1").values
+        telomere_bound_r = data["diff"].astype(str).str.endswith("1").values
 
     elif isinstance(data, tuple):
-        assert len(data) == 6, f'Data tuple must have 6 elements. Current has {len(data)} elements.'
+        assert len(data) == 6, (
+            f"Data tuple must have 6 elements. Current has {len(data)} elements."
+        )
         event_sorted, cn_profile, starts, ends, centro_start, centro_end = data
         telomere_bound_l = (event_sorted == 0).any(axis=1)
         telomere_bound_r = (event_sorted == len(cn_profile)).any(axis=1)
@@ -226,21 +274,34 @@ def calc_telomere_bound_left_and_right(data):
 
 def calc_centromere_bound(data):
     if isinstance(data, pd.DataFrame):
-        from spice.data_loaders import load_centromeres # import has to be here to prevent circular imports
-        centromeres = load_centromeres().astype(int)
-        data = (data
-                .drop(columns=['centro_start', 'centro_end'], errors='ignore')
-                .join(centromeres, on='chrom'))
+        from spice.data_loaders import (
+            load_centromeres,
+        )  # import has to be here to prevent circular imports
 
-        centromere_bound_r = data.eval('end >= centro_start-2 and end <= centro_end+2').values
-        centromere_bound_l = data.eval('start >= centro_start-2 and start <= centro_end+2').values
+        centromeres = load_centromeres().astype(int)
+        data = data.drop(columns=["centro_start", "centro_end"], errors="ignore").join(
+            centromeres, on="chrom"
+        )
+
+        centromere_bound_r = data.eval(
+            "end >= centro_start-2 and end <= centro_end+2"
+        ).values
+        centromere_bound_l = data.eval(
+            "start >= centro_start-2 and start <= centro_end+2"
+        ).values
 
     elif isinstance(data, tuple):
-        assert len(data) == 6, f'Data tuple must have 6 elements. Current has {len(data)} elements.'
+        assert len(data) == 6, (
+            f"Data tuple must have 6 elements. Current has {len(data)} elements."
+        )
         event_sorted, cn_profile, starts, ends, centro_start, centro_end = data
         # Note: safer to use np.logical_and and np.logical_or instead of & and |
-        centromere_bound_r = np.logical_and(ends >= centro_start-2, ends <= centro_end+2)
-        centromere_bound_l = np.logical_and(starts >= centro_start-2, starts <= centro_end+2)
+        centromere_bound_r = np.logical_and(
+            ends >= centro_start - 2, ends <= centro_end + 2
+        )
+        centromere_bound_l = np.logical_and(
+            starts >= centro_start - 2, starts <= centro_end + 2
+        )
     else:
         raise ValueError(f"Data type {type(data)} not supported")
 
@@ -249,31 +310,56 @@ def calc_centromere_bound(data):
 
 @CALC_NEW()
 def create_chrom_type_pos_indices(events_df):
-    assert (events_df.index == np.arange(len(events_df))).all(), "index has to be 0, 1, 2, 3, ..."
+    assert (events_df.index == np.arange(len(events_df))).all(), (
+        "index has to be 0, 1, 2, 3, ..."
+    )
     chrom_type_pos_indices = dict()
-    for chrom, type, pos in itertools.product(events_df['chrom'].unique(), events_df['type'].unique(), events_df['pos_detail'].unique()):
-        chrom_type_pos_indices[(chrom, type, pos)] = events_df.query('chrom == @chrom and type == @type and pos_detail == @pos').index.values
+    for chrom, type, pos in itertools.product(
+        events_df["chrom"].unique(),
+        events_df["type"].unique(),
+        events_df["pos_detail"].unique(),
+    ):
+        chrom_type_pos_indices[(chrom, type, pos)] = events_df.query(
+            "chrom == @chrom and type == @type and pos_detail == @pos"
+        ).index.values
 
-    assert len(np.unique(np.concatenate([x for x in chrom_type_pos_indices.values()]))) == len(events_df), f"{len(np.unique(np.concatenate([x for x in chrom_type_pos_indices.values()]))), len(events_df)}"
-    assert all(np.sort(np.unique(np.concatenate([x for x in chrom_type_pos_indices.values()]))) == np.sort(events_df.index))
+    assert len(
+        np.unique(np.concatenate([x for x in chrom_type_pos_indices.values()]))
+    ) == len(events_df), (
+        f"{len(np.unique(np.concatenate([x for x in chrom_type_pos_indices.values()]))), len(events_df)}"
+    )
+    assert all(
+        np.sort(np.unique(np.concatenate([x for x in chrom_type_pos_indices.values()])))
+        == np.sort(events_df.index)
+    )
 
     return chrom_type_pos_indices
 
 
 def create_full_paths_events_df(cur_full_paths, chrom_segments):
     unique_events_df = pd.DataFrame(cur_full_paths.events.values())
-    unique_events_df = create_full_df_from_diff_df(unique_events_df, cur_full_paths.id, chrom_segments)
-    cur_events_df = pd.concat([unique_events_df.iloc[np.array(list(sol.elements()))] for sol in cur_full_paths.solutions], axis=0)
-    cur_events_df['chain_nr'] = np.repeat(np.arange(cur_full_paths.n_solutions), cur_full_paths.n_events)
-    cur_events_df['chain'] = cur_events_df['id'] + ':' + cur_events_df['chain_nr'].astype(str)
-    cur_events_df['events_per_chrom'] = cur_full_paths.n_events
-    cur_events_df['n_paths'] = int(cur_full_paths.n_solutions)
+    unique_events_df = create_full_df_from_diff_df(
+        unique_events_df, cur_full_paths.id, chrom_segments
+    )
+    cur_events_df = pd.concat(
+        [
+            unique_events_df.iloc[np.array(list(sol.elements()))]
+            for sol in cur_full_paths.solutions
+        ],
+        axis=0,
+    )
+    cur_events_df["chain_nr"] = np.repeat(
+        np.arange(cur_full_paths.n_solutions), cur_full_paths.n_events
+    )
+    cur_events_df["chain"] = (
+        cur_events_df["id"] + ":" + cur_events_df["chain_nr"].astype(str)
+    )
+    cur_events_df["events_per_chrom"] = cur_full_paths.n_events
+    cur_events_df["n_paths"] = int(cur_full_paths.n_solutions)
     return cur_events_df
 
 
- 
-
- # TODO: move
+# TODO: move
 def get_diffs_from_events_df(cur_id, events_df, supported_chains_only=False):
     cur_events = events_df.query("id == @cur_id")
 
@@ -283,9 +369,9 @@ def get_diffs_from_events_df(cur_id, events_df, supported_chains_only=False):
     if cur_events.empty:
         print("no events found")
         return None
-    if 'chain_nr' not in cur_events.columns:
+    if "chain_nr" not in cur_events.columns:
         cur_events = cur_events.copy()
-        cur_events['chain_nr'] = 0
+        cur_events["chain_nr"] = 0
 
     all_diffs = []
     for chain_nr, events in cur_events.groupby("chain_nr"):
@@ -298,7 +384,7 @@ def get_diffs_from_events_df(cur_id, events_df, supported_chains_only=False):
         # sort pre before post
         diffs = diffs[np.argsort(events["wgd"].values)[::-1]]
         # revert to get pre-WGD LOHs in the right order
-        n_pre = (events["wgd"].values == 'pre').sum()
+        n_pre = (events["wgd"].values == "pre").sum()
         diffs[n_pre:] = diffs[n_pre:][::-1]
         all_diffs.append(diffs)
     return all_diffs
@@ -314,7 +400,9 @@ def suppress_warnings(warning_type=None):
                 else:
                     warnings.simplefilter("ignore")
                 return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -324,11 +412,14 @@ class FunctionTimeoutError(TimeoutError):
 
 def timeout(seconds, mode="auto", error=FunctionTimeoutError):
     if seconds is None or seconds == "None":
+
         def decorator(func):
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
+
             return wrapper
+
         return decorator
     if seconds <= 0:
         raise ValueError("seconds must be > 0")
