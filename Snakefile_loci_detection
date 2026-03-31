@@ -42,6 +42,10 @@ analysis_dir = os.path.join(loci_results_dir, 'detection')
 loci_cfg = config['loci_detection']
 N_bootstrap = loci_cfg.get('N_bootstrap', 1000)
 N_kernel    = loci_cfg.get('N_kernel', 100_000)
+# Clamped so the assertion assert num_bootstrap_iterations <= N_bootstrap
+# in infer_loci_widths always holds, even if user sets N_bootstrap_for_widths
+# larger than N_bootstrap in the config.
+N_bootstrap_for_widths = min(loci_cfg.get('N_bootstrap_for_widths', 200), N_bootstrap)
 
 # Load final events from TSV (event_inference writes final_events.tsv, not .pickle)
 final_events_tsv = os.path.join(results_dir, 'final_events.tsv')
@@ -362,7 +366,7 @@ rule loci_widths_intermediate:
             loci_results_dir=loci_results_dir,
             data_per_length_scale=data_per_length_scale,
             N_bootstrap=N_bootstrap,
-            num_bootstrap_iterations=200,
+            num_bootstrap_iterations=N_bootstrap_for_widths,
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
@@ -471,7 +475,7 @@ rule loci_widths_intermediate_2:
             loci_results_dir=loci_results_dir,
             data_per_length_scale=data_per_length_scale,
             N_bootstrap=N_bootstrap,
-            num_bootstrap_iterations=200,
+            num_bootstrap_iterations=N_bootstrap_for_widths,
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
@@ -673,7 +677,7 @@ rule final_loci_widths:
             loci_results_dir=loci_results_dir,
             data_per_length_scale=data_per_length_scale,
             N_bootstrap=N_bootstrap,
-            num_bootstrap_iterations=200,
+            num_bootstrap_iterations=N_bootstrap_for_widths,
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
