@@ -561,6 +561,20 @@ rule mcmc_large:
             )
             result = _solve_with_mcmc_wrapper(skip_loh_check=True)
             logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC (LOH checks skipped)")
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            # Graceful failure: save None to output so aggregate_mcmc_large can still complete.
+            # Root cause: certain WGD chromosomes have zero-gap segment boundaries (from 1bp
+            # gaps in raw CNA data converted via half-open intervals during centromere processing).
+            # MCMC proposal functions can generate start==end events pointing to these boundaries,
+            # causing AssertionError / ValueError in get_event_dist_data_from_mcmc_proposal.
+            import pickle as _pickle
+            import traceback as _tb
+            logger.warning(f"mcmc_large graceful failure for {wildcards.chrom_id} ({wildcards.wgd}): {e}")
+            print(_tb.format_exc(), file=sys.stderr)
+            with open(output[0], 'wb') as _f:
+                _pickle.dump(None, _f)
 
 
 rule mcmc_fallback:
@@ -633,6 +647,15 @@ rule mcmc_fallback:
             )
             result = _solve_with_mcmc_wrapper(skip_loh_check=True)
             logger.info(f"Successfully solved {wildcards.chrom_id} ({wildcards.wgd}) with MCMC fallback (LOH checks skipped)")
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except Exception as e:
+            import pickle as _pickle
+            import traceback as _tb
+            logger.warning(f"mcmc_fallback graceful failure for {wildcards.chrom_id} ({wildcards.wgd}): {e}")
+            print(_tb.format_exc(), file=sys.stderr)
+            with open(output[0], 'wb') as _f:
+                _pickle.dump(None, _f)
 
 
 rule combine:
