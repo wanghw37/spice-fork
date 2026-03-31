@@ -59,6 +59,11 @@ final_events_df = process_final_events_for_loci_routines(
     use_observed_centromeres=loci_cfg.get('use_observed_centromeres', True),
 )
 CHROMOSOMES = sorted(final_events_df['chrom'].unique())
+if not CHROMOSOMES:
+    raise ValueError(
+        "No chromosomes found in final_events_df after preprocessing. "
+        "Check that final_events.tsv is not empty and preprocessing parameters are correct."
+    )
 
 print(f"Loci detection workflow for {name}")
 print(f"Processing chromosomes: {CHROMOSOMES}")
@@ -218,7 +223,7 @@ rule ranking:
             force_up_down=True,
             max_n_clusters=None,
             N_iterations=500,
-            n_cores=1,
+            n_cores=-1,
             max_fitness=1_000,
             calc_new_filename=output.ranked
         )
@@ -254,6 +259,7 @@ rule within_ci_filtering:
             data_per_length_scale=data_per_length_scale,
             show_progress=False,
             log_progress=True,
+            N_iterations_optimization=loci_cfg.get('within_ci_N_iterations', 10_000),
             calc_new_filename=output.filtered
         )
 
@@ -360,7 +366,7 @@ rule loci_widths_intermediate:
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
-            n_jobs=1,
+            n_jobs=-1,
             calc_new_filename=output.widths
         )
 
@@ -469,7 +475,7 @@ rule loci_widths_intermediate_2:
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
-            n_jobs=1,
+            n_jobs=-1,
             calc_new_filename=output.widths
         )
 
@@ -540,6 +546,7 @@ rule final_within_ci_filtering:
             remove_empty_loci=False,
             show_progress=False,
             log_progress=True,
+            N_iterations_optimization=loci_cfg.get('within_ci_N_iterations', 10_000),
             calc_new_filename=output.final_filtered
         )
 
@@ -574,6 +581,7 @@ rule final_filter_loci:
             n_iterations_optim=100_000,
             show_progress_optim=False,
             max_deviation_optim=0.00001,
+            th_locus_prominence=loci_cfg.get('th_locus_prominence', 1),
             calc_new_filename=output.final_loci
         )
 
@@ -669,7 +677,7 @@ rule final_loci_widths:
             max_pos_change=1e5,
             max_deviation=0.00001,
             num_optimization_iterations=1_000,
-            n_jobs=1,
+            n_jobs=-1,
             calc_new_filename=output.widths
         )
 
@@ -688,7 +696,9 @@ rule combine:
         )
     output:
         tsv=os.path.join(loci_results_dir, 'final_loci_detection.tsv'),
-        summary=os.path.join(loci_results_dir, 'summary.txt')
+        summary=os.path.join(loci_results_dir, 'summary.txt'),
+        filtered_sp=os.path.join(loci_results_dir, 'detection', 'final_loci_detection_filtered.pickle'),
+        filtered_widths=os.path.join(loci_results_dir, 'detection', 'final_loci_detection_filtered_widths.pickle')
     log:
         os.path.join(loci_results_dir, 'logs', 'combine.log')
     run:
@@ -713,14 +723,8 @@ rule combine:
         )
 
         final_loci_df.to_csv(output.tsv, sep='\t', index=True)
-        save_pickle(
-            filtered_sp,
-            os.path.join(loci_results_dir, 'detection', 'final_loci_detection_filtered.pickle')
-        )
-        save_pickle(
-            filtered_widths,
-            os.path.join(loci_results_dir, 'detection', 'final_loci_detection_filtered_widths.pickle')
-        )
+        save_pickle(filtered_sp, output.filtered_sp)
+        save_pickle(filtered_widths, output.filtered_widths)
 
         with open(output.summary, 'w') as f:
             f.write(f'Loci Detection De-Novo Summary\n')
