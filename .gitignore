@@ -30,3 +30,5 @@ plots/*
 # Specific files
 notebooks/debug*.ipynb
 OLD_Snakefile
+# User-specific configs (prevent git operations from overwriting local settings)
+configs/

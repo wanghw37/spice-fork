@@ -422,15 +422,18 @@ rule full_paths:
                 )
             
             result = run_full_paths()
-            logger.info(f"Successfully computed full paths for {{wildcards.chrom_id}} ({{wildcards.wgd}})")
+            logger.info(f"Successfully computed full paths for {wildcards.chrom_id} ({wildcards.wgd})")
+        except (SystemExit, KeyboardInterrupt):
+            raise
         except Exception as e:
-            print(f"ERROR in full_paths rule: {{e}}", file=sys.stderr)
+            # Graceful failure: create .failed marker so mcmc_fallback handles this chrom.
+            # Do NOT re-raise: Snakemake must see the job as succeeded so that the .done
+            # output file is touched and aggregate_full_paths can complete.
+            logger.warning(f"full_paths graceful failure for {wildcards.chrom_id} ({wildcards.wgd}): {e}")
             print(traceback.format_exc(), file=sys.stderr)
-            # Create marker file for MCMC fallback
             fallback_dir = os.path.join(results_events_dir, wildcards.wgd, "full_paths_failed")
             os.makedirs(fallback_dir, exist_ok=True)
-            Path(os.path.join(fallback_dir, f"{{wildcards.chrom_id}}.failed")).touch()
-            raise
+            Path(os.path.join(fallback_dir, f"{wildcards.chrom_id}.failed")).touch()
 
 
 rule disambiguate_knn:
@@ -594,7 +597,7 @@ rule mcmc_fallback:
             level=config['params'].get('logging_level', 'INFO'),
         )
         logger = get_logger('SPICE', spice_prefix=False)
-        logger.info(f"Running MCMC fallback for {{wildcards.chrom_id}} ({{wildcards.wgd}}) due to full_paths timeout")
+        logger.info(f"Running MCMC fallback for {wildcards.chrom_id} ({wildcards.wgd}) due to full_paths timeout")
         
         chrom_segments_file = resolve_copynumber_file()
         is_wgd = (wildcards.wgd == 'wgd')

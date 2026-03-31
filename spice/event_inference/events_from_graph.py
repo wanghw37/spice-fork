@@ -1253,8 +1253,16 @@ def loh_filters_for_graph_result_diffs_wgd(
             target_elements_post = []
             loh_fulfilled = []
             for i in range(n_pre):
-                target_element = model.NewIntVar(-1, 1, f"target_{i}")
-                model.AddElement(order_pre[i], list(diff_col_pre), target_element)
+                target_element = model.NewIntVar(-1, 1, f"target_pre_{i}")
+                # Avoid model.AddElement which triggers a SolutionIsFeasible assertion
+                # failure in ortools 9.8.3296. Use explicit BoolVar constraints instead.
+                for pos in range(n_pre):
+                    pos_active = model.NewBoolVar(f"pos_pre_{i}_{pos}")
+                    model.Add(order_pre[i] == pos).OnlyEnforceIf(pos_active)
+                    model.Add(order_pre[i] != pos).OnlyEnforceIf(pos_active.Not())
+                    model.Add(target_element == int(diff_col_pre[pos])).OnlyEnforceIf(
+                        pos_active
+                    )
                 target_elements_pre.append(target_element)
                 if is_loh:
                     current_loh_fulfilled = model.NewBoolVar(f"loh_fulfilled_{i}")
@@ -1268,8 +1276,15 @@ def loh_filters_for_graph_result_diffs_wgd(
                 else:
                     model.Add(sum(target_elements_pre) > (-2 if total_cn else -1))
             for i in range(n_post):
-                target_element = model.NewIntVar(-1, 1, f"target_{i}")
-                model.AddElement(order_post[i], list(diff_col_post), target_element)
+                target_element = model.NewIntVar(-1, 1, f"target_post_{i}")
+                # Avoid model.AddElement — use explicit BoolVar constraints instead.
+                for pos in range(n_post):
+                    pos_active = model.NewBoolVar(f"pos_post_{i}_{pos}")
+                    model.Add(order_post[i] == pos).OnlyEnforceIf(pos_active)
+                    model.Add(order_post[i] != pos).OnlyEnforceIf(pos_active.Not())
+                    model.Add(target_element == int(diff_col_post[pos])).OnlyEnforceIf(
+                        pos_active
+                    )
                 target_elements_post.append(target_element)
                 if is_loh:
                     current_loh_fulfilled = model.NewBoolVar(f"loh_fulfilled_{i}")
@@ -1287,8 +1302,8 @@ def loh_filters_for_graph_result_diffs_wgd(
 
         solver = cp_model.CpSolver()
         solver.parameters.num_search_workers = 1
-        if single_time_limit is not None:
-            solver.parameters.max_time_in_seconds = single_time_limit
+        # Note: loh_filters_for_graph_result_diffs_wgd has no time limit parameter;
+        # the time limit was intentionally omitted for the WGD variant.
         solver_solutions = CpSolverSolutionArray(order_pre + order_post, silent=True)
         if return_all_solutions:
             solver.parameters.enumerate_all_solutions = True
