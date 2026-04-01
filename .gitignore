@@ -36,6 +36,9 @@ configs/
 # Claude AI settings
 .claude/
 
+# Git worktrees
+.worktrees/
+
 # Data files
 CLCA_data/
 cohort_preprocess.py
