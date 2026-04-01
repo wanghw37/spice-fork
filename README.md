@@ -4,10 +4,10 @@
 
 **SPICE**, Selection Patterns In somatic Copy-number Events, is a framework that
 1) infers discrete copy-number events from allele-specific profiles,
-2) detects loci of selection in the copy-number data and 
+2) detects loci of selection in the copy-number data and
 3) can assign loci of selection to copy-number data
 
-See the [accompanying BioRxiv preprint](www.biorxiv.org/content/10.64898/2026.03.01.708809v1) for more information.
+See the [accompanying BioRxiv preprint](https://www.biorxiv.org/content/10.1101/2026.03.01.708809v1) for more information.
 
 ## 0. Installation
 
@@ -20,7 +20,7 @@ Install MEDICC2 using conda/mamba as it requires compilation of source files
 conda install -c bioconda -c conda-forge medicc2
 ```
 
-Or better directly create a new conda environment with MEDICC2 inside of it 
+Or better directly create a new conda environment with MEDICC2 inside of it
 ```bash
 conda create -n spice_env -c conda-forge -c bioconda medicc2
 conda activate spice_env
@@ -65,7 +65,7 @@ pip install CNSistent
 SPICE uses a configuration file for each run which are specified using the `--config` flag.
 This means you can keep multiple configs (e.g., in `configs/`) and select them at runtime.
 
-Parameters and directories not specified in the provided config file are taken from the default config file `default_config.yaml`.
+Parameters and directories not specified in the provided config file are taken from the default config file `spice/objects/default_config.yaml`.
 Each config must specify `name` and `directories.base_dir`.
 
 ### 1.1 Minimal `config.yaml` override example
@@ -78,7 +78,7 @@ input_files:
    copynumber: data/example_data.tsv
 ```
 
-For other parameters that can be modified, see `default_config.yaml`.
+For other parameters that can be modified, see `spice/objects/default_config.yaml` or the [complete parameter reference](doc/configuration.md).
 
 ### 1.2 Relative vs absolute paths
 
@@ -155,8 +155,8 @@ SPICE expects tab-separated input files with copy-number segments. See example f
 - `cn_b`: Copy number for allele B (haplotype-specific)
 
 **Optional files:**
-- `wgd_status`: TSV with WGD status per sample (see section 1.3)
-- `xy_samples`: TSV with sex status per sample (see section 1.4)
+- `wgd_status`: TSV with WGD status per sample (see section 3.2.2)
+- `xy_samples`: TSV with sex status per sample (see section 3.2.3)
 - `sv`: Pickle file (`.pickle`) with SV calls used for SV-constrained event matching (see section 3.2.4)
 
 Total copy-number mode can be enabled by setting `params.total_cn: True` in the config file.
@@ -237,11 +237,14 @@ Results are saved in `results/{name}/`
 - `events_summary.tsv`: Summary statistics for each ID (sample, chromosome, allele combination), including number of events and path selection method
 
 **Intermediate files** (with separate directories for WGD and non-WGD profiles):
-- `chrom_data_full/`: Preprocessed chromosome data
-- `full_paths_single_solution/`: Chromosomes with unique solutions
-- `full_paths_multiple_solutions/`: Chromosomes requiring kNN selection
-- `knn_solved_chroms/`: Results from kNN selection
-- `mcmc_solved_chroms_large/`: Results from MCMC sampling
+- `events/nowgd/` and `events/wgd/` (mirrored structure for each WGD class):
+  - `chrom_data_full/`: Preprocessed chromosome data
+  - `full_paths_single_solution/`: Chromosomes with unique solutions
+  - `full_paths_multiple_solutions/`: Chromosomes requiring kNN selection
+  - `knn_solved_chroms/`: Results from kNN selection
+  - `mcmc_solved_chroms_large/`: Results from MCMC sampling for large chromosomes
+  - `mcmc_solved_chroms_full/`: Results from MCMC fallback (when full path enumeration times out)
+- `events/failed_reports.tsv`: Summary of any IDs that failed processing
 
 Intermediate files can be removed using
 
@@ -255,7 +258,7 @@ The preprocessing step runs only when `--run-preprocessing` is provided and prep
 
 - Data normalization: ensures chromosome names use `chr` prefix; converts starts/ends to integers and adjusts starts to 0-based.
 - CN capping and filtering: caps copy numbers at 8; removes segments shorter than 1kb.
-- WGD resolution: loads from `wgd_status.tsv` or infers as described in section 1.3.
+- WGD resolution: loads from `wgd_status.tsv` or infers as described in section 3.2.2.
 - Sex resolution: loads from `xy_samples.tsv` or infers by presence of `chrY`; for XY samples with haplotype-specific CN, sets minor CN of `chrX` and `chrY` to 0.
 - Neighbor merging: merges adjacent segments with identical CNs to reduce fragmentation.
 - Telomeres and centromeres: fills telomeric regions and optionally bins/unifies centromeres (can be skipped with `--pre-skip-centromeres`).
@@ -279,17 +282,42 @@ Note that parallel processing will disable logging for the different subprocesse
 
 ### 3.6 Snakemake Execution
 
-For parallel execution on computing clusters, use the Snakemake workflow.
+For parallel execution on computing clusters, use the Snakemake workflow (`Snakefile_event_inference`).
 
 **Note:** Snakemake must be installed separately:
 ```bash
 conda install bioconda::snakemake
 ```
 
-**Coming soon, not fully implemented yet**
+#### 3.6.1 Local Snakemake Execution
 
+Run the full event inference pipeline locally with multiple cores:
 
-**Note:** If you get a `LockException` run `spice --config configs/events_example.yaml --unlock` to remove the lock.
+```bash
+# Run locally with 8 cores
+spice event_inference --config configs/events_example.yaml --snakemake --snakemake-mode local --snakemake-cores 8
+```
+
+#### 3.6.2 SLURM Cluster Execution
+
+For SLURM-based clusters, use `--snakemake-mode slurm`. This requires a Snakemake SLURM profile configured for your cluster:
+
+```bash
+# Run on SLURM cluster, submitting up to 250 jobs
+spice event_inference --config configs/events_example.yaml --snakemake --snakemake-mode slurm --snakemake-jobs 250
+```
+
+The SLURM profile must be set via the `SNAKEMAKE_PROFILE` environment variable or `--profile` Snakemake argument. Memory and disk resources are declared per rule and controlled via the config parameters `knn_mem`, `full_path_mem`, `full_path_mem_large`, and `full_path_disk`.
+
+#### 3.6.3 Snakemake Notes
+
+- The Snakemake workflow reads the config via the `SPICE_CONFIG` environment variable or `--config config_path=<path>`.
+- The merged config (default + user) is persisted to `results/{name}/config.yaml` for provenance.
+- If `full_paths` enumeration exceeds a time limit or crashes, those chromosomes automatically fall back to MCMC via the `mcmc_fallback` rule.
+- If you get a `LockException`, run the following to remove the lock:
+  ```bash
+  spice event_inference --config <path/to/config> --unlock
+  ```
 
 ### 3.7 Logging Output
 
@@ -301,6 +329,20 @@ Control where logging output is sent with the `--log` flag:
 
 When using `--log file` or `--log both`, logs are saved to the configured log directory from the config with a filename pattern: `{name}_{timestamp}.log`
 
+### 3.8 Key Parameters for Event Inference
+
+The following parameters are most commonly tuned. See [doc/configuration.md](doc/configuration.md) for the complete reference.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `params.total_cn` | `False` | Set `True` for single-channel total CN mode |
+| `params.mcmc_n_iterations_scale` | `200` | Scale factor for MCMC iterations; reduce to speed up at the cost of accuracy |
+| `params.mcmc_stop_after_no_improvement` | `null` | Stop MCMC early after N iterations without improvement (disabled by default) |
+| `params.time_limit_mcmc` | `null` | Per-chromosome MCMC time limit in seconds (no output saved if exceeded) |
+| `params.time_limit_all_solutions` | `null` | Per-chromosome full-path enumeration time limit in seconds |
+| `params.skip_loh_check_for_large_chroms` | `False` | Skip LOH checks for chromosomes handled by MCMC (set `True` if MCMC times out) |
+| `params.knn_k` | `250` | Number of neighbours used for KNN disambiguation |
+
 ---
 
 ## 4. Loci Detection
@@ -311,7 +353,38 @@ Loci detection identifies recurrently gained or lost copy-number loci across a c
 
 ### 4.1 Pipeline Overview
 
-Coming soon!
+Loci detection runs a multi-step signal processing pipeline per chromosome. All chromosomes are processed independently and the results are combined at the end.
+
+Two pipeline modes are available, controlled by `loci_detection.loci_steps` in your config:
+
+- **`fast`** (default): 6-step pipeline — suitable for quick exploration
+  `detection → flipping → optimizing → final_within_ci_filtering → final_filter_loci → final_loci_widths`
+
+- **`default`**: Full 15-step pipeline — recommended for final/publication-quality results
+  `detection → flipping → ranking → within_ci_filtering → limiting → optimizing_intermediate → loci_widths_intermediate → merging → optimizing → loci_widths_intermediate_2 → filter_loci_intermediate_1 → final_within_ci_filtering → final_filter_loci → final_limiting → final_selection_points → final_loci_widths → combine`
+
+You can also run individual steps or resume from a specific step using step names or the trailing `+` syntax:
+```bash
+# Run only the combine step
+spice loci_detection --config configs/loci_example.yaml --loci-steps combine
+
+# Run from 'merging' onwards
+spice loci_detection --config configs/loci_example.yaml --loci-steps "merging+"
+```
+
+Use `--overwrite` to force recalculation of existing intermediate results.
+
+#### 4.1.1 Snakemake Execution for Loci Detection
+
+For parallel per-chromosome processing, use the Snakemake workflow (`Snakefile_loci_detection`):
+
+```bash
+# Local execution
+spice loci_detection --config configs/loci_example.yaml --snakemake --snakemake-mode local --snakemake-cores 8
+
+# SLURM cluster execution
+spice loci_detection --config configs/loci_example.yaml --snakemake --snakemake-mode slurm --snakemake-jobs 250
+```
 
 ### 4.2 Expected Input
 
@@ -320,37 +393,55 @@ Loci detection requires:
 
 ### 4.3 Expected Output
 
-Results are saved in `results/{name}`
+Results are saved in `results/{name}/`
 
-**Main outputs:**
-- `detected_loci.tsv`: List of detected recurrent loci with coordinates and occurrence statistics
-- `loci_summary.tsv`: Summary statistics for each detected locus
+**Main output:**
+- `final_loci_detection.tsv`: List of detected recurrent loci with genomic coordinates, direction (gain/loss), and p-values
 
-Intermediate files are saved in `results/{name}/events`
+**Intermediate files** are saved in `results/{name}/loci_of_selection/`:
+- `signal_bootstrap/`: Bootstrap signal samples per chromosome
+- `data_per_length_scale/`: Convolution kernel data per chromosome
+- `detection/{chrom}/`: Per-chromosome intermediate pickle files for each pipeline step
 
 ---
 
 ## 5. Loci Assignment
 
-Loci assignment assigns predetermined loci to a cohort. This is recommended for smaller cohorts where de-novo loci detection is prohibited.
+Loci assignment assigns predetermined loci to a cohort. This is recommended for smaller cohorts where de-novo loci detection is not feasible, or for cross-cohort comparisons using a reference loci set.
 
 ### 5.1 Pipeline Overview
 
-Coming soon!
+Loci assignment maps each sample's copy-number events to a reference set of loci and quantifies the signal at each locus. It runs per chromosome and produces both a detailed assignment table and a sample-by-loci matrix for downstream analysis.
+
+The default reference loci set is `spice/reference_loci/all_460_loci.tsv`, derived from pan-cancer TCGA data. You can specify a custom reference via `input_files.reference_loci` in your config.
+
+```bash
+# Run loci assignment with default TCGA reference loci
+spice loci_assignment --config configs/loci_example.yaml
+
+# Force recalculation of existing results
+spice loci_assignment --config configs/loci_example.yaml --overwrite
+```
 
 ### 5.2 Expected Input
 
 Loci assignment requires:
 - **Event inference results**: `final_events.tsv` produced by the event_inference pipeline
-- **Reference loci**: defaults to `spice/reference_loci/all_460_loci.tsv`, the reference loci set created on TCGA data
+- **Reference loci**: defaults to `spice/reference_loci/all_460_loci.tsv`, the reference loci set created on TCGA data. Override with `input_files.reference_loci` in your config.
 
 ### 5.3 Expected Output
 
 Results are saved in `results/{name}/`
 
 **Main outputs:**
-- `loci_assignments.tsv`: Assignment of loci to samples with presence/absence or quantitative scores
-- `loci_sample_matrix.tsv`: Binary or weighted matrix of loci (rows) by samples (columns)
+- `final_loci_assignment.tsv`: Assignment of reference loci to samples with fitness values and event coordinates
+- `loci_sample_matrix.tsv`: Binary matrix of loci (rows) × samples (columns); values are `0`/`1` indicating absence/presence
+- `loci_sample_matrix_weighted.tsv`: Weighted version of the matrix; values represent event counts (useful for downstream analyses requiring quantitative signal)
+
+**Intermediate files** are saved in `results/{name}/loci_of_selection/assignment/{chrom}/`:
+- `assignment_within_ci_filtered.pickle`
+- `final_selection_points.pickle`
+- `final_loci_widths.pickle`
 
 ---
 
@@ -392,7 +483,7 @@ spice plotting --config <path/to/config> --plot-single-locus 3 --loci-mode detec
 ```
 
 **Requirements:**
-- Plotting requires `final_loci_detection.tsv` or `final_loci_assignment.tsv`.
+- Plotting requires `final_loci_detection.tsv` (detection mode) or `final_loci_assignment.tsv` (assignment mode).
 - Output PNGs are saved to `plot_dir/{name}/` (see `directories.plot_dir` in config; defaults to `plots/`).
 
 For interactive exploration, see `notebooks/loci_plotting.ipynb`.
@@ -417,13 +508,22 @@ See also the example notebooks for how to use the API.
 
 ## 8. Known issues
 
-**SPICE event inference runs for too long / doesn't finish:** This is usually due to the MCMC event inference for large chromosomes (>9 events). Either reduce the paramter `mcmc_n_iterations_scale` which will reduce the total number of iterations to run or set the parameter `time_limit_mcmc` to a time limit (in seconds) which will abort the computation. Note that in the case of `time_limit_mcmc`, no output will be saved.
+**SPICE event inference runs for too long / doesn't finish:** This is usually due to the MCMC event inference for large chromosomes (>9 events). Try the following options (in order of preference):
+1. Set `params.mcmc_stop_after_no_improvement: 500` in your config to enable early stopping when the MCMC score stops improving.
+2. Reduce `params.mcmc_n_iterations_scale` (e.g., to `50`) to reduce the total number of MCMC iterations.
+3. Set `params.time_limit_mcmc` to a time limit in seconds to abort computation after the limit (note: no output is saved for aborted chromosomes).
+4. Set `params.skip_loh_check_for_large_chroms: True` to skip LOH checks for MCMC chromosomes (may reduce accuracy).
 
-**Long computation time for single-cell data:** SPICE treats every sample/chromsome pair separately. For single-cell datasets this results in a massive amount of individual calculations. We recommend to first remove duplicate sample/chromosomes and then run SPICE on this reduced dataset.
+**Long computation time for single-cell data:** SPICE treats every sample/chromosome pair separately. For single-cell datasets this results in a massive amount of individual calculations. We recommend to first remove duplicate sample/chromosomes and then run SPICE on this reduced dataset.
+
+**Snakemake LockException:** If a previous Snakemake run was interrupted, you may encounter a lock error. Remove it with:
+```bash
+spice event_inference --config <path/to/config> --unlock
+```
 
 ## 9. Citation
 
-If you use SPICE in your research, please cite the [accompanying BioRxiv preprint](www.biorxiv.org/content/10.64898/2026.03.01.708809v1):
+If you use SPICE in your research, please cite the [accompanying BioRxiv preprint](https://www.biorxiv.org/content/10.1101/2026.03.01.708809v1):
 
 > **Deciphering selection patterns of somatic copy-number events** Tom L. Kaufmann, Adam Streck, Florian Markowetz, Peter Van Loo, Roland F. Schwarz. bioRxiv 2026; doi: https://doi.org/10.64898/2026.03.01.708809
 
