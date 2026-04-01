@@ -960,7 +960,9 @@ def run_loci_assignment_per_chrom(
     save_pickle(filtered_selection_points, os.path.join(output_dir, 'final_selection_points.pickle'))
     
     # Infer widths (placeholder - set to small widths for now)
-    N_loci = sum(len(chrom_loci.query('type == @t')) for t in ['OG', 'TSG'])
+    # Use post-filter count from filtered_selection_points, not raw input count,
+    # so loci_widths always matches the actual number of surviving loci.
+    N_loci = len(filtered_selection_points[0])
     loci_widths = [1e6] * N_loci  # Default width of 1 Mbp
     save_pickle(loci_widths, os.path.join(output_dir, 'final_loci_widths.pickle'))
     
