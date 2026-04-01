@@ -1002,6 +1002,7 @@ def main_loci_assignment(args):
     from spice.main_loci_functions import (
         loci_assignment,
         process_final_events_for_loci_routines,
+        build_loci_sample_matrix,
     )
     from spice.data_loaders import load_final_events
 
@@ -1054,6 +1055,25 @@ def main_loci_assignment(args):
     logger.info(
         f"Saved final combined loci assignment results to {final_loci_output_path}"
     )
+
+    # Build and save loci-sample matrices (binary and weighted)
+    logger.info("Building loci-sample matrices")
+    results_base = os.path.join(config["directories"]["results_dir"], config["name"])
+    binary_matrix, weighted_matrix = build_loci_sample_matrix(
+        final_loci_df=final_loci_df,
+        processed_events=processed_events,
+    )
+
+    binary_matrix_path = os.path.join(results_base, "loci_sample_matrix.tsv")
+    binary_matrix.to_csv(binary_matrix_path, sep="\t", index=True)
+    logger.info(
+        f"Saved binary loci-sample matrix ({len(final_loci_df)} loci × "
+        f"{len(binary_matrix.columns)} samples) to {binary_matrix_path}"
+    )
+
+    weighted_matrix_path = os.path.join(results_base, "loci_sample_matrix_weighted.tsv")
+    weighted_matrix.to_csv(weighted_matrix_path, sep="\t", index=True)
+    logger.info(f"Saved weighted loci-sample matrix to {weighted_matrix_path}")
 
     logger.info("Loci assignment pipeline completed.")
 

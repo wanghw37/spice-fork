@@ -1108,6 +1108,87 @@ def loci_assignment(
     return final_loci_df
 
 
+def build_loci_sample_matrix(
+    final_loci_df,
+    processed_events,
+):
+    """
+    Build binary and weighted loci (rows) x samples (columns) matrices.
+
+    For each locus, a sample column is set to 1 (binary) or an event count
+    (weighted) if that sample has at least one copy-number event of the
+    matching type whose genomic range contains the locus center position.
+
+    Overlap criterion (consistent with calc_event_rate_per_loci):
+        event.start < locus.pos < event.end   (point containment)
+
+    Type mapping:
+        locus type 'OG'  -> event type 'gain'
+        locus type 'TSG' -> event type 'loss'
+
+    Parameters
+    ----------
+    final_loci_df : pd.DataFrame
+        Loci dataframe (indexed by locus index) with columns:
+        chrom, pos, type (OG or TSG).
+    processed_events : pd.DataFrame
+        Processed events (output of process_final_events_for_loci_routines),
+        with columns: sample, chrom, start, end, type (gain or loss).
+
+    Returns
+    -------
+    Tuple[pd.DataFrame, pd.DataFrame]
+        (binary_matrix, weighted_matrix)
+        Both are indexed by the same integer index as final_loci_df;
+        columns are sorted sample names.
+        binary_matrix  : int8  - 1 if >=1 overlapping event, 0 otherwise.
+        weighted_matrix: float - count of overlapping events per locus/sample.
+    """
+    type_map = {'OG': 'gain', 'TSG': 'loss'}
+
+    samples = sorted(processed_events['sample'].unique())
+    sample_idx = {s: i for i, s in enumerate(samples)}
+    n_loci = len(final_loci_df)
+    n_samples = len(samples)
+
+    binary_data = np.zeros((n_loci, n_samples), dtype=np.int8)
+    weighted_data = np.zeros((n_loci, n_samples), dtype=np.float32)
+
+    for row_i, (_, locus) in enumerate(final_loci_df.iterrows()):
+        cur_chrom = locus['chrom']
+        cur_pos = locus['pos']
+        cur_event_type = type_map.get(locus['type'])
+        if cur_event_type is None:
+            continue
+
+        # Select events for this chromosome and matching type that contain
+        # the locus center position (point-containment criterion)
+        mask = (
+            (processed_events['chrom'] == cur_chrom) &
+            (processed_events['type'] == cur_event_type) &
+            (processed_events['start'] < cur_pos) &
+            (processed_events['end'] > cur_pos)
+        )
+        overlapping = processed_events.loc[mask]
+        if overlapping.empty:
+            continue
+
+        sample_counts = overlapping.groupby('sample').size()
+        for s, cnt in sample_counts.items():
+            if s in sample_idx:
+                j = sample_idx[s]
+                binary_data[row_i, j] = 1
+                weighted_data[row_i, j] = float(cnt)
+
+    binary_matrix = pd.DataFrame(
+        binary_data, index=final_loci_df.index, columns=samples
+    )
+    weighted_matrix = pd.DataFrame(
+        weighted_data, index=final_loci_df.index, columns=samples
+    )
+    return binary_matrix, weighted_matrix
+
+
 def build_final_loci_df(
     all_selection_points: Dict,
     all_loci_widths: Dict,
