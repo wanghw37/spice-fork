@@ -32,3 +32,12 @@ notebooks/debug*.ipynb
 OLD_Snakefile
 # User-specific configs (prevent git operations from overwriting local settings)
 configs/
+
+# Claude AI settings
+.claude/
+
+# Data files
+CLCA_data/
+cohort_preprocess.py
+media-1.pdf
+2026.03.01.708809v1.full.pdf
