@@ -35,6 +35,7 @@ configs/
 
 # Claude AI settings
 .claude/
+.codex/
 
 # Git worktrees
 .worktrees/
