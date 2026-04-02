@@ -37,6 +37,11 @@ configs/
 .claude/
 .codex
 
+# Local per-worktree environments
+.envrc
+.direnv/
+.conda-env/
+
 # Git worktrees
 .worktrees/
 

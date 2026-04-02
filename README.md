@@ -60,6 +60,21 @@ To use the extra preprocessing also install CNSistent:
 pip install CNSistent
 ```
 
+### 0.5 Per-worktree development environments
+
+If you use `git worktree`, do not share one editable conda environment across
+multiple worktrees. Instead, give each worktree its own prefix env at
+`./.conda-env` and use `direnv` to auto-activate it.
+
+From the root of any worktree:
+
+```bash
+scripts/bootstrap_worktree_env.sh
+direnv allow
+```
+
+For a detailed setup guide, see [doc/worktree-envs.md](doc/worktree-envs.md).
+
 ## 1. Configuration
 
 SPICE uses a configuration file for each run which are specified using the `--config` flag.

@@ -1,0 +1,38 @@
+# Copy this file to .envrc in a worktree root and run: direnv allow
+# Assumes one prefix conda environment per worktree at ./.conda-env
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  log_error ".envrc must be used inside a Git worktree."
+  exit 1
+fi
+
+worktree_root="$(git rev-parse --show-toplevel)"
+env_prefix="${worktree_root}/.conda-env"
+
+if [[ ! -x "${env_prefix}/bin/python" ]]; then
+  log_error "Missing ${env_prefix}. Create it with scripts/bootstrap_worktree_env.sh."
+  exit 1
+fi
+
+conda_bin="${CONDA_EXE:-$(command -v conda || true)}"
+if [[ -z "${conda_bin}" ]]; then
+  log_error "conda not found in PATH. Install/initialize conda before using direnv."
+  exit 1
+fi
+
+conda_base="$("${conda_bin}" info --base 2>/dev/null || true)"
+if [[ -z "${conda_base}" || ! -f "${conda_base}/etc/profile.d/conda.sh" ]]; then
+  log_error "Could not locate conda.sh from ${conda_bin}."
+  exit 1
+fi
+
+watch_file "${worktree_root}/setup.py"
+watch_file "${worktree_root}/.envrc"
+
+source "${conda_base}/etc/profile.d/conda.sh"
+conda activate "${env_prefix}" >/dev/null 2>&1
+
+export PYTHONNOUSERSITE=1
+export SPICE_WORKTREE_ROOT="${worktree_root}"
+
+log_status "Activated ${env_prefix}"
