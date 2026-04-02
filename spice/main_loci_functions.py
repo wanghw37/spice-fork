@@ -178,6 +178,7 @@ def run_loci_detection_per_chrom(
     # Load relevant data
     data_per_length_scale = collect_data_per_length_scale(
         final_events_df, cur_chrom, N_bootstrap=N_bootstrap, N_kernel=N_kernel, loci_results_dir=loci_results_dir,
+        assert_non_empty=False,
         calc_new_force_new=overwrite_preprocessing,
         calc_new_filename=os.path.join(loci_results_dir, 'data_per_length_scale', f'{cur_chrom}.pickle'))
 
@@ -890,10 +891,16 @@ def run_loci_assignment_per_chrom(
         (selection_points, loci_widths)
     """
     logger.info(f'Running loci assignment for {cur_chrom}')
-    
+
+    # Filter reference_loci for this chromosome
+    chrom_loci = reference_loci_df.query('chrom == @cur_chrom').copy()
+    if len(chrom_loci) == 0:
+        logger.warning(f'No loci defined for {cur_chrom}')
+        return None, None
+
     output_dir = os.path.join(loci_results_dir, 'assignment', cur_chrom)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     logger.info(f'Calculating bootstrap signals for {cur_chrom}')
     bootstrap_sampling_of_signal(
         cur_chrom=cur_chrom,
@@ -907,14 +914,9 @@ def run_loci_assignment_per_chrom(
     data_per_length_scale = collect_data_per_length_scale(
         final_events_df, cur_chrom, N_bootstrap=N_bootstrap, N_kernel=N_kernel,
         loci_results_dir=loci_results_dir,
+        assert_non_empty=False,
         calc_new_force_new=overwrite_preprocessing,
         calc_new_filename=os.path.join(loci_results_dir, 'data_per_length_scale', f'{cur_chrom}.pickle'))
-    
-    # Filter reference_loci for this chromosome
-    chrom_loci = reference_loci_df.query('chrom == @cur_chrom').copy()
-    if len(chrom_loci) == 0:
-        logger.warning(f'No loci defined for {cur_chrom}')
-        return None, None
     
     logger.info(f'Found {len(chrom_loci)} loci to assign for {cur_chrom}')
     

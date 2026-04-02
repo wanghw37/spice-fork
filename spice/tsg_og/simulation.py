@@ -174,6 +174,13 @@ def resimulate_events(cur_widths, selection_points=None, chrom_size=None, baseli
         chrom_start = TELOMERES_OBSERVED.loc[cur_chrom, length_scale]['chrom_start']
         chrom_end = TELOMERES_OBSERVED.loc[cur_chrom, length_scale]['chrom_end']
 
+    overlap_bins = np.arange(int(chrom_size/segment_size)) * segment_size
+    if len(overlap_bins) > 0:
+        overlap_bins[-1] = chrom_size
+    bin_starts = np.arange(0, chrom_size, segment_size)[:-1]
+    if len(cur_widths) == 0:
+        return overlap_bins, np.zeros(len(bin_starts), dtype=float)
+
     assert np.max(cur_widths) < chrom_size
 
     if remove_centromere_bound:
@@ -221,9 +228,6 @@ def resimulate_events(cur_widths, selection_points=None, chrom_size=None, baseli
     selected_ends = cur_ends[np.arange(len(cur_ends)), selected_events_indices]
     
     # Overlap with bins
-    overlap_bins = np.arange(int(chrom_size/segment_size)) * segment_size
-    overlap_bins[-1] = chrom_size
-    bin_starts = np.arange(0, chrom_size, segment_size)[:-1]
     bin_ends = np.append(bin_starts[1:], chrom_size)  # Ensure the last bin ends at chrom_size
     start_bins = np.searchsorted(bin_ends, selected_starts, side='right')
     end_bins = np.searchsorted(bin_starts, selected_ends, side='left')

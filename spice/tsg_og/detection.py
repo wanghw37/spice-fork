@@ -106,6 +106,61 @@ def get_cur_widths(
     return cur_widths
 
 
+def _get_empty_length_scale_data(
+    final_events_df,
+    cur_chrom,
+    cur_length_scale,
+    cur_type,
+    ls_i,
+    signal_bounds,
+    segment_size_dict=DEFAULT_SEGMENT_SIZE_DICT,
+    length_scale_boundaries=DEFAULT_LENGTH_SCALE_BOUNDARIES,
+):
+    signals = (
+        create_events_in_segmentation(
+            final_events_df.iloc[0:0].copy(),
+            bin_df=segment_size_dict[cur_length_scale],
+            skip_tqdm=True,
+        )
+        .loc[cur_chrom]
+        .sum(axis=1)
+        .values
+    )
+    centro_start, centro_end = CENTROMERES_OBSERVED.loc[cur_chrom, cur_length_scale].values
+    centro_start_i, centro_end_i = (
+        int(centro_start // segment_size_dict[cur_length_scale]),
+        int(centro_end // segment_size_dict[cur_length_scale]),
+    )
+    non_centromere_index = np.setdiff1d(
+        np.arange(len(signals)), np.arange(centro_start_i, centro_end_i)
+    )
+    loci_width = max(
+        4,
+        int(
+            np.ceil(
+                length_scale_boundaries[cur_length_scale][0]
+                / segment_size_dict[cur_length_scale]
+            )
+        ),
+    )
+    return {
+        "chrom": cur_chrom,
+        "signals": signals,
+        "cur_widths": np.array([], dtype=float),
+        "loci_width": loci_width,
+        "length_scale": cur_length_scale,
+        "type": cur_type,
+        "length_scale_i": ls_i,
+        "non_centromere_index": non_centromere_index,
+        "cur_loss_norm": 1.0,
+        "kernel": None,
+        "height_multiplier": None,
+        "centromere_values": None,
+        "signal_bounds": signal_bounds,
+        "has_events": False,
+    }
+
+
 @CALC_NEW()
 def collect_data_per_length_scale(
     final_events_df,
@@ -137,6 +192,7 @@ def collect_data_per_length_scale(
     )
 
     data_per_length_scale = {}
+    missing_bins = []
     for ls_i, (cur_length_scale, cur_type) in enumerate(
         itertools.product(["small", "mid1", "mid2", "large"], ["gain", "loss"])
     ):
@@ -155,12 +211,18 @@ def collect_data_per_length_scale(
                 raise ValueError(
                     f"No events found for {cur_chrom}, {cur_length_scale}, {cur_type}"
                 )
-            else:
-                logger.warning(
-                    f"No events found for {cur_chrom}, {cur_length_scale}, {cur_type}, skipping"
-                )
-                data_per_length_scale[(cur_length_scale, cur_type)] = None
-                continue
+            missing_bins.append((cur_length_scale, cur_type))
+            data_per_length_scale[(cur_length_scale, cur_type)] = _get_empty_length_scale_data(
+                final_events_df=final_events_df,
+                cur_chrom=cur_chrom,
+                cur_length_scale=cur_length_scale,
+                cur_type=cur_type,
+                ls_i=ls_i,
+                signal_bounds=signal_bootstrap_bounds[ls_i],
+                segment_size_dict=segment_size_dict,
+                length_scale_boundaries=length_scale_boundaries,
+            )
+            continue
 
         cur_length_scale_border = length_scale_boundaries[cur_length_scale]
         cur_events = final_events_df.query(
@@ -211,6 +273,8 @@ def collect_data_per_length_scale(
         )
 
         cur_loss_norm = np.mean(signals[non_centromere_index])
+        if not np.isfinite(cur_loss_norm) or cur_loss_norm <= 0:
+            cur_loss_norm = 1.0
 
         # Use tuple (cur_length_scale, cur_type) as dictionary key
         data_per_length_scale[(cur_length_scale, cur_type)] = {
@@ -227,14 +291,20 @@ def collect_data_per_length_scale(
             "height_multiplier": height_multiplier,
             "centromere_values": centromere_values,
             "signal_bounds": signal_bootstrap_bounds[ls_i],
+            "has_events": True,
         }
 
+    if missing_bins:
+        logger.warning(
+            "%s missing bins: %s",
+            cur_chrom,
+            ", ".join(
+                f"{cur_length_scale}/{cur_type}"
+                for cur_length_scale, cur_type in missing_bins
+            ),
+        )
+
     for key in data_per_length_scale.keys():
-        if (
-            data_per_length_scale[key] is None
-            or data_per_length_scale[("small", "gain")] is None
-        ):
-            continue
         data_per_length_scale[key]["signal_upsampling"] = len(
             data_per_length_scale[("small", "gain")]["signals"]
         ) / len(data_per_length_scale[key]["signals"])
@@ -362,11 +432,19 @@ def _optimize_selection_points(
         best_selection_points_per_cluster
     )
     if allowed_fitness_change is None:
-        allowed_fitness_change = np.ones((8, len(best_selection_points_per_cluster)))
+        allowed_fitness_change = np.ones(
+            (8, len(best_selection_points_per_cluster)), dtype=bool
+        )
+    allowed_fitness_change = np.asarray(allowed_fitness_change, dtype=bool)
     assert allowed_fitness_change.shape == (
         8,
         len(best_selection_points_per_cluster),
     ), (allowed_fitness_change.shape, len(best_selection_points_per_cluster))
+    has_events_mask = np.array(
+        [data.get("has_events", True) for data in data_per_length_scale.values()],
+        dtype=bool,
+    )[:, None]
+    allowed_fitness_change &= has_events_mask
     if ls_to_optimize is not None:
         allowed_fitness_change[np.setdiff1d(np.arange(8), ls_to_optimize), :] = False
     if not isinstance(max_fitness, (list, np.ndarray)):

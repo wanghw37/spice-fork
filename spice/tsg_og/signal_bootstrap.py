@@ -66,6 +66,13 @@ def bootstrap_sampling_of_signal(
             cur_length_scale_border = length_scale_boundaries[cur_length_scale]
             cur_events = final_events_df.query('pos == "internal" and type == @cur_type and chrom == @cur_chrom and width > @cur_length_scale_border[0] and width <= @cur_length_scale_border[1]').reset_index().copy()
 
+            if len(cur_events) == 0:
+                signals_bootstrap = (create_events_in_segmentation(
+                    cur_events, bin_df=segment_size_dict[cur_length_scale], skip_tqdm=True)
+                    .loc[cur_chrom].sum(axis=1).values)
+                cur_bootstrap_signals.append(signals_bootstrap)
+                continue
+
             # Actual bootstrap sampling with replacement
             cur_events = cur_events.loc[np.random.choice(np.arange(len(cur_events)), replace=True, size=len(cur_events))].reset_index().copy()
 
