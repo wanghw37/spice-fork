@@ -1,0 +1,133 @@
+"""
+Snakemake workflow for running loci_assignment N times independently
+and computing consensus loci (added_events > 1 in every run).
+
+Usage:
+  snakemake -s Snakefile_loci_consensus \
+      --config base_config=configs/my_project.yaml n_runs=10 \
+      --cores 5
+
+Optional config:
+  reference_loci=path/to/custom_loci.tsv
+  consensus_name=my_consensus
+"""
+
+import os
+import yaml
+import copy
+
+
+base_config_path = config.get("base_config", None)
+if base_config_path is None:
+    raise ValueError("base_config is required. Pass via --config base_config=path/to/config.yaml")
+
+n_runs = int(config.get("n_runs", 5))
+reference_loci_override = config.get("reference_loci", None)
+
+with open(base_config_path, "r") as f:
+    base_cfg = yaml.safe_load(f)
+
+base_name = base_cfg["name"]
+consensus_name = config.get("consensus_name", f"{base_name}_consensus")
+
+results_dir = base_cfg.get("directories", {}).get("results_dir", "results")
+if "directories" in base_cfg and "base_dir" in base_cfg["directories"]:
+    results_dir = os.path.join(base_cfg["directories"]["base_dir"], results_dir)
+
+consensus_dir = os.path.join(results_dir, consensus_name)
+temp_dir = os.path.join("temp", "consensus")
+
+
+def run_name(i):
+    return f"{base_name}_consensus_{i}"
+
+
+def run_result_dir(i):
+    return os.path.join(results_dir, run_name(i))
+
+
+def run_config_path(i):
+    return os.path.join(temp_dir, "configs", f"run_{i}.yaml")
+
+
+def run_output_path(i):
+    return os.path.join(run_result_dir(i), "final_loci_assignment.tsv")
+
+
+# ---------------------------------------------------------------------------
+# Rule: all
+# ---------------------------------------------------------------------------
+rule all:
+    input:
+        os.path.join(consensus_dir, "consensus_loci.tsv"),
+        os.path.join(temp_dir, ".cleanup_done")
+
+
+# ---------------------------------------------------------------------------
+# Rule: generate_configs
+# ---------------------------------------------------------------------------
+rule generate_configs:
+    output:
+        [run_config_path(i) for i in range(n_runs)],
+    run:
+        for i in range(n_runs):
+            cfg = copy.deepcopy(base_cfg)
+            cfg["name"] = run_name(i)
+            if reference_loci_override is not None:
+                if "input_files" not in cfg:
+                    cfg["input_files"] = {}
+                cfg["input_files"]["reference_loci"] = reference_loci_override
+            out_path = run_config_path(i)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "w") as f:
+                yaml.dump(cfg, f, default_flow_style=False)
+        print(f"Generated {n_runs} config files in {temp_dir}/configs/")
+
+
+# ---------------------------------------------------------------------------
+# Rule: run_assignment (parallel)
+# ---------------------------------------------------------------------------
+rule run_assignment:
+    input:
+        config_file=os.path.join(temp_dir, "configs", "run_{run_id}.yaml"),
+    output:
+        os.path.join(results_dir, f"{base_name}_consensus_{{run_id}}", "final_loci_assignment.tsv"),
+    threads: 1
+    shell:
+        "conda run -n spice_env_fork spice loci_assignment "
+        "--config {input.config_file} --overwrite"
+
+
+# ---------------------------------------------------------------------------
+# Rule: summarize
+# ---------------------------------------------------------------------------
+rule summarize:
+    input:
+        tsvs=[run_output_path(i) for i in range(n_runs)],
+    output:
+        os.path.join(consensus_dir, "consensus_loci.tsv"),
+    run:
+        import subprocess
+        cmd = [
+            "python", os.path.join("scripts", "summarize_consensus.py"),
+            output[0], str(n_runs),
+        ] + input.tsvs
+        subprocess.run(cmd, check=True)
+
+
+# ---------------------------------------------------------------------------
+# Rule: cleanup
+# ---------------------------------------------------------------------------
+rule cleanup:
+    input:
+        os.path.join(consensus_dir, "consensus_loci.tsv"),
+    output:
+        touch(os.path.join(temp_dir, ".cleanup_done")),
+    run:
+        import shutil
+        shutil.rmtree(os.path.join(temp_dir, "configs"), ignore_errors=True)
+        for i in range(n_runs):
+            rd = run_result_dir(i)
+            if os.path.isdir(rd):
+                shutil.rmtree(rd)
+        print("Cleaned up intermediate run directories and temporary configs.")
