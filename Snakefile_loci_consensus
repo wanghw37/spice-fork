@@ -23,6 +23,7 @@ if base_config_path is None:
 
 n_runs = int(config.get("n_runs", 5))
 reference_loci_override = config.get("reference_loci", None)
+conda_env = config.get("conda_env", "spice_env_fork")
 
 with open(base_config_path, "r") as f:
     base_cfg = yaml.safe_load(f)
@@ -33,6 +34,7 @@ consensus_name = config.get("consensus_name", f"{base_name}_consensus")
 results_dir = base_cfg.get("directories", {}).get("results_dir", "results")
 if "directories" in base_cfg and "base_dir" in base_cfg["directories"]:
     results_dir = os.path.join(base_cfg["directories"]["base_dir"], results_dir)
+results_dir = os.path.normpath(results_dir)
 
 consensus_dir = os.path.join(results_dir, consensus_name)
 temp_dir = os.path.join("temp", "consensus")
@@ -67,6 +69,8 @@ rule all:
 # Rule: generate_configs
 # ---------------------------------------------------------------------------
 rule generate_configs:
+    input:
+        base_config_path,
     output:
         [run_config_path(i) for i in range(n_runs)],
     run:
@@ -94,7 +98,7 @@ rule run_assignment:
         os.path.join(results_dir, f"{base_name}_consensus_{{run_id}}", "final_loci_assignment.tsv"),
     threads: 1
     shell:
-        "conda run -n spice_env_fork spice loci_assignment "
+        f"conda run -n {conda_env} spice loci_assignment "
         "--config {input.config_file} --overwrite"
 
 
