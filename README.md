@@ -458,6 +458,50 @@ Results are saved in `results/{name}/`
 - `final_selection_points.pickle`
 - `final_loci_widths.pickle`
 
+### 5.4 Consensus Loci Assignment (Repeated Runs)
+
+Loci assignment involves stochastic optimization, so results vary across runs. To obtain robust loci, you can run assignment multiple times independently and keep only loci that consistently show signal.
+
+A Snakemake workflow (`Snakefile_loci_consensus`) automates this:
+
+1. Runs `spice loci_assignment` N times in parallel, each with an independent result directory
+2. Filters loci where `added_events > 1` in **every** run (strict consensus)
+3. Outputs consensus loci with per-run values and average `added_events`
+4. Cleans up all intermediate per-run results
+
+```bash
+# Run 10 independent assignments with 5 parallel cores
+snakemake -s Snakefile_loci_consensus \
+    --config base_config=configs/loci_example.yaml n_runs=10 \
+    --cores 5
+```
+
+**Required config parameters** (passed via `--config`):
+
+| Parameter | Description |
+|-----------|-------------|
+| `base_config` | Path to a standard SPICE config file (same one you'd pass to `spice loci_assignment --config`) |
+| `n_runs` | Number of independent assignment runs |
+
+**Optional config parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `reference_loci` | (from base_config) | Override reference loci file for all runs |
+| `consensus_name` | `{name}_consensus` | Output directory name |
+| `conda_env` | `spice_env_fork` | Conda environment name |
+
+**Output:** `results/{name}_consensus/consensus_loci.tsv`
+
+```
+chrom  pos  type  avg_added_events  run_0  run_1  ...  run_{N-1}
+```
+
+**Notes:**
+- Each run is fully independent (including bootstrap preprocessing), so results are truly random replicates
+- The workflow requires Snakemake and `spice_env_fork` conda environment
+- After completion, intermediate per-run result directories are automatically deleted
+
 ---
 
 ## 6. Plotting
