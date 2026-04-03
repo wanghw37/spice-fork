@@ -24,6 +24,18 @@ if base_config_path is None:
 n_runs = int(config.get("n_runs", 5))
 reference_loci_override = config.get("reference_loci", None)
 conda_env = config.get("conda_env", "spice_env_fork")
+conda_envs_root = config.get("conda_envs_root", None)
+if conda_envs_root is not None:
+    spice_bin = os.path.join(conda_envs_root, conda_env, "bin", "spice")
+else:
+    import subprocess as _sp
+    _result = _sp.run(
+        ["conda", "run", "-n", conda_env, "which", "spice"],
+        capture_output=True, text=True,
+    )
+    spice_bin = _result.stdout.strip()
+if not os.path.isfile(spice_bin):
+    raise FileNotFoundError(f"spice binary not found at {spice_bin}")
 
 with open(base_config_path, "r") as f:
     base_cfg = yaml.safe_load(f)
@@ -98,8 +110,7 @@ rule run_assignment:
         os.path.join(results_dir, f"{base_name}_consensus_{{run_id}}", "final_loci_assignment.tsv"),
     threads: 1
     shell:
-        f"conda run -n {conda_env} spice loci_assignment "
-        "--config {input.config_file} --overwrite"
+        f"{spice_bin} loci_assignment --config {{input.config_file}} --overwrite"
 
 
 # ---------------------------------------------------------------------------
