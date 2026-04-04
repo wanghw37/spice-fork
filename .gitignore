@@ -37,6 +37,9 @@ configs/
 .claude/
 .codex
 
+# OpenCode AI settings
+.opencode/
+
 # Local per-worktree environments
 .envrc
 .direnv/
@@ -50,3 +53,6 @@ CLCA_data/
 cohort_preprocess.py
 media-1.pdf
 2026.03.01.708809v1.full.pdf
+
+# Temporary files
+temp/
