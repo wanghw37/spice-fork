@@ -13,6 +13,7 @@ Optional config:
 """
 
 import os
+from pathlib import Path
 import yaml
 import copy
 
@@ -40,13 +41,32 @@ if not os.path.isfile(spice_bin):
 with open(base_config_path, "r") as f:
     base_cfg = yaml.safe_load(f)
 
+base_directories = base_cfg.get("directories", {})
+base_dir = base_directories.get("base_dir", None)
+if base_dir is not None:
+    base_dir = str(Path(base_dir).expanduser().resolve())
+
 base_name = base_cfg["name"]
 consensus_name = config.get("consensus_name", f"{base_name}_consensus")
 
-results_dir = base_cfg.get("directories", {}).get("results_dir", "results")
-if "directories" in base_cfg and "base_dir" in base_cfg["directories"]:
-    results_dir = os.path.join(base_cfg["directories"]["base_dir"], results_dir)
-results_dir = os.path.normpath(results_dir)
+
+def resolve_config_path(path_value):
+    path = Path(path_value).expanduser()
+    if path.is_absolute():
+        return str(path.resolve())
+    if base_dir is not None:
+        return str((Path(base_dir) / path).resolve())
+    return str(path.resolve())
+
+
+results_dir = resolve_config_path(base_directories.get("results_dir", "results"))
+
+input_files = base_cfg.get("input_files", {})
+if "final_events" in input_files:
+    final_events_path = resolve_config_path(input_files["final_events"])
+else:
+    final_events_path = os.path.join(results_dir, base_name, "final_events.tsv")
+final_events_path = os.path.normpath(final_events_path)
 
 consensus_dir = os.path.join(results_dir, consensus_name)
 temp_dir = os.path.join("temp", "consensus")
@@ -86,12 +106,20 @@ rule generate_configs:
     output:
         [run_config_path(i) for i in range(n_runs)],
     run:
+        if not os.path.exists(final_events_path):
+            raise FileNotFoundError(
+                "Consensus loci assignment requires a final_events.tsv from the base "
+                f"project, but no file was found at {final_events_path}. "
+                "Run SPICE event inference first or set input_files.final_events in "
+                f"{base_config_path}."
+            )
         for i in range(n_runs):
             cfg = copy.deepcopy(base_cfg)
             cfg["name"] = run_name(i)
+            if "input_files" not in cfg:
+                cfg["input_files"] = {}
+            cfg["input_files"]["final_events"] = final_events_path
             if reference_loci_override is not None:
-                if "input_files" not in cfg:
-                    cfg["input_files"] = {}
                 cfg["input_files"]["reference_loci"] = reference_loci_override
             out_path = run_config_path(i)
             os.makedirs(os.path.dirname(out_path), exist_ok=True)

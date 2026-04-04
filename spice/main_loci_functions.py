@@ -1215,10 +1215,11 @@ def run_loci_assignment_per_chrom(
         ),
     )
 
-    # Load data per length scale
+    # Load data per length scale (allow empty tracks for assignment)
     data_per_length_scale = collect_data_per_length_scale(
         final_events_df,
         cur_chrom,
+        assert_non_empty=False,
         N_bootstrap=N_bootstrap,
         N_kernel=N_kernel,
         loci_results_dir=loci_results_dir,
@@ -1227,6 +1228,12 @@ def run_loci_assignment_per_chrom(
             loci_results_dir, "data_per_length_scale", f"{cur_chrom}.pickle"
         ),
     )
+
+    # Build base trainability mask: empty tracks cannot acquire nonzero fitness
+    base_trainability_mask = np.array([
+        not data.get("is_empty_track", False)
+        for data in data_per_length_scale.values()
+    ])
 
     # Filter reference_loci for this chromosome
     chrom_loci = reference_loci_df.query("chrom == @cur_chrom").copy()
@@ -1247,6 +1254,10 @@ def run_loci_assignment_per_chrom(
     logger.info(f"Optimizing fitness for {cur_chrom} with fixed positions")
     up_down_order = (chrom_loci["type"] == "OG").values
 
+    # Build allowed_fitness_change with base trainability mask
+    n_loci = len(chrom_loci)
+    allowed_fitness_change = np.tile(base_trainability_mask[:, None], (1, n_loci))
+
     optimized_selection_points, _, _ = _optimize_selection_points(
         N_iterations_optim,
         dummy_selection_points,
@@ -1257,6 +1268,7 @@ def run_loci_assignment_per_chrom(
         N_iterations_base=0,
         up_down_order=up_down_order,
         allow_pos_change=False,  # Keep positions fixed
+        allowed_fitness_change=allowed_fitness_change,
     )
     optimized_selection_points = list(zip(*optimized_selection_points))
 
@@ -1275,6 +1287,22 @@ def run_loci_assignment_per_chrom(
             output_dir, "assignment_within_ci_filtered.pickle"
         ),
     )
+
+    # Defensive cleanup: zero fitness on empty tracks before save
+    empty_track_indices = [
+        ls_i for ls_i, data in enumerate(data_per_length_scale.values())
+        if data.get("is_empty_track", False)
+    ]
+    if empty_track_indices:
+        filtered_selection_points = [list(x) for x in filtered_selection_points]
+        for ls_i in empty_track_indices:
+            for cluster_i in range(len(filtered_selection_points[0])):
+                old_sp = filtered_selection_points[ls_i][cluster_i]
+                filtered_selection_points[ls_i][cluster_i] = SelectionPoints(
+                    loci=[[entry.pos, 0] for entry in old_sp.loci],
+                    plateaus=[(entry.start, entry.end, 0) for entry in old_sp.plateaus],
+                )
+        filtered_selection_points = [tuple(x) for x in filtered_selection_points]
 
     # Save results
     save_pickle(
