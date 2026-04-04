@@ -39,6 +39,23 @@ PLATEAU_WIDTH = 10e5
 CHROM_LENS = data_loaders.load_chrom_lengths()
 
 
+def _normalize_parallel_jobs(requested_jobs, max_jobs, default_jobs=1):
+    """Clamp parallel job counts to a safe positive budget."""
+    if requested_jobs is None:
+        requested_jobs = default_jobs
+
+    try:
+        requested_jobs = int(requested_jobs)
+    except (TypeError, ValueError):
+        requested_jobs = default_jobs
+
+    if requested_jobs < 1:
+        requested_jobs = default_jobs
+
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(requested_jobs, max_jobs, cpu_count))
+
+
 def calc_mse_loss(data_per_length_scale, cur_conv_simulated):
     return sum(
         [
@@ -1101,13 +1118,6 @@ def rank_loci(
     n_cores=None,
 ):
 
-    log_debug(
-        logger,
-        f"Using {n_cores} cores for parallelization"
-        if n_cores is not None
-        else "Using single core for optimization",
-    )
-
     assert len(best_selection_points) == 8
     if max_n_clusters is None:
         max_n_clusters = len(best_selection_points[0])
@@ -1115,6 +1125,14 @@ def rank_loci(
         list(x) for x in copy_list_of_selection_points(best_selection_points)
     ]
     N_clusters = len(best_selection_points[0])
+    effective_cores = _normalize_parallel_jobs(n_cores, N_clusters)
+
+    log_debug(
+        logger,
+        f"Using {effective_cores} core(s) for parallelization"
+        if effective_cores > 1
+        else "Using single core for optimization",
+    )
 
     original_up_down_order = (
         np.stack([[x[0].fitness > 0 for x in y] for y in best_selection_points[::2]])
@@ -1192,8 +1210,8 @@ def rank_loci(
                 best_selection_points_per_cluster
             )
 
-        if n_cores is not None:
-            results = Parallel(n_jobs=n_cores)(
+        if effective_cores > 1:
+            results = Parallel(n_jobs=effective_cores)(
                 delayed(_optimize_cluster)(cluster_i, iteration, fixed_clusters)
                 for cluster_i in range(N_clusters)
             )
@@ -1807,7 +1825,7 @@ def infer_loci_widths(
     max_fitness=None,
     num_optimization_iterations=1_000,
     which_loci=None,
-    n_jobs=-1,
+    n_jobs=1,
     N_bootstrap=None,
 ):
     """
@@ -1855,6 +1873,7 @@ def infer_loci_widths(
 
     if which_loci is None:
         which_loci = np.arange(len(final_selection_points[0]))
+    effective_jobs = _normalize_parallel_jobs(n_jobs, num_bootstrap_iterations)
 
     up_down_order = [
         any(
@@ -1917,13 +1936,13 @@ def infer_loci_widths(
             logger,
             f"Inferring locus width for cluster {cluster_i} of {len(final_selection_points[0])}",
         )
-        if n_jobs == 1:
+        if effective_jobs == 1:
             all_pos = [
                 __optimize_for_bootstrap_iteration(bootstrap_iteration, cluster_i)
                 for bootstrap_iteration in range(num_bootstrap_iterations)
             ]
         else:
-            all_pos = Parallel(n_jobs=n_jobs)(
+            all_pos = Parallel(n_jobs=effective_jobs)(
                 delayed(__optimize_for_bootstrap_iteration)(
                     bootstrap_iteration, cluster_i
                 )

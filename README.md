@@ -499,6 +499,9 @@ chrom  pos  type  avg_added_events  run_0  run_1  ...  run_{N-1}
 
 **Notes:**
 - Each run is fully independent (including bootstrap preprocessing), so results are truly random replicates
+- Consensus requires event inference outputs for the base project before assignment runs start
+- If `input_files.final_events` is set in `base_config`, the workflow reuses that file for every run
+- Otherwise the workflow automatically reuses `results/{name}/final_events.tsv` from the base project
 - The workflow requires Snakemake and `spice_env_fork` conda environment
 - After completion, intermediate per-run result directories are automatically deleted
 

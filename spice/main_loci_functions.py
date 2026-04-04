@@ -85,6 +85,7 @@ def run_loci_detection_per_chrom(
     final_limiting_N_iterations_optim=10_000,
     N_bootstrap_for_widths=200,
     th_locus_prominence=5,
+    worker_cores=1,
 ):
     """
     Run the loci detection pipeline for a given chromosome.
@@ -122,6 +123,7 @@ def run_loci_detection_per_chrom(
     th_locus_prominence : float, default=5
         Threshold for locus prominence filtering
     """
+    worker_cores = max(1, int(worker_cores))
 
     # Define all available steps
     which_options = [
@@ -288,7 +290,7 @@ def run_loci_detection_per_chrom(
                 force_up_down=not skip_up_down,
                 max_n_clusters=None,
                 N_iterations=ranking_N_iterations,
-                n_cores=-1,
+                n_cores=worker_cores,
                 max_fitness=1_000,
                 calc_new_force_new=overwrite,
                 calc_new_filename=os.path.join(output_dir, filenames["ranking"]),
@@ -399,7 +401,7 @@ def run_loci_detection_per_chrom(
             max_deviation=0.00001,
             N_bootstrap=N_bootstrap,
             num_optimization_iterations=infer_widths_N_iterations,
-            n_jobs=-1,
+            n_jobs=worker_cores,
             calc_new_force_new=overwrite,
             calc_new_filename=os.path.join(
                 output_dir, filenames["loci_widths_intermediate"]
@@ -480,7 +482,7 @@ def run_loci_detection_per_chrom(
             max_deviation=0.00001,
             N_bootstrap=N_bootstrap,
             num_optimization_iterations=infer_widths_N_iterations,
-            n_jobs=-1,
+            n_jobs=worker_cores,
             calc_new_force_new=overwrite,
             calc_new_filename=os.path.join(
                 output_dir, filenames["loci_widths_intermediate_2"]
@@ -640,7 +642,7 @@ def run_loci_detection_per_chrom(
             max_deviation=0.00001,
             N_bootstrap=N_bootstrap,
             num_optimization_iterations=infer_widths_N_iterations,
-            n_jobs=-1,
+            n_jobs=worker_cores,
             calc_new_force_new=overwrite,
             calc_new_filename=os.path.join(output_dir, filenames["final_loci_widths"]),
         )

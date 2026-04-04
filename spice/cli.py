@@ -11,6 +11,33 @@ import re
 import spice
 from spice.utils import save_pickle
 
+THREAD_LIMIT_ENV_VARS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "BLIS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
+
+def _normalize_worker_cores(value, default=1):
+    """Return a positive worker-core budget."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        value = default
+    return max(1, value)
+
+
+def _build_thread_limited_env(base_env=None, threads=1):
+    """Clamp math-library thread pools to the requested budget."""
+    env = dict(os.environ if base_env is None else base_env)
+    thread_count = str(_normalize_worker_cores(threads))
+    for env_var in THREAD_LIMIT_ENV_VARS:
+        env[env_var] = thread_count
+    return env
+
 
 def get_version():
     """Get installed package version, with setup.py fallback for editable installs."""
@@ -792,6 +819,35 @@ def main_loci_detection(args):
 
     logger.info("Running SPICE: Loci Detection Mode (De-Novo)")
     logger.info(f"Project name: {config['name']}")
+    loci_params = config["loci_detection"]
+
+    if args.unlock:
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        snakefile = os.path.join(repo_root, "Snakefile_loci_detection")
+        if not os.path.exists(snakefile):
+            raise FileNotFoundError(f"Snakefile_loci_detection not found at {snakefile}")
+
+        cmd = [
+            "snakemake",
+            "-s",
+            snakefile,
+            "--configfile",
+            args.config_path,
+            "--config",
+            f"config_path={args.config_path}",
+            "--unlock",
+        ]
+
+        env = _build_thread_limited_env(threads=1)
+        env["SPICE_CONFIG"] = os.path.abspath(args.config_path)
+
+        logger.info(
+            "Unlocking loci-detection Snakemake working directory with config: %s",
+            args.config_path,
+        )
+        subprocess.run(cmd, check=True, env=env)
+        logger.info("Successfully unlocked Snakemake working directory.")
+        return
 
     # Handle snakemake mode
     if args.snakemake:
@@ -821,11 +877,26 @@ def main_loci_detection(args):
         else:
             cmd.extend(["-c", str(args.snakemake_cores)])
 
-        env = os.environ.copy()
+        worker_cores = (
+            _normalize_worker_cores(args.snakemake_cores)
+            if args.snakemake_mode == "local"
+            else _normalize_worker_cores(loci_params.get("worker_cores", 1))
+        )
+        env = _build_thread_limited_env(threads=1)
         env["SPICE_CONFIG"] = os.path.abspath(args.config_path)
+        env["SPICE_LOCI_WORKER_CORES"] = str(worker_cores)
         logger.info(f"Running Snakemake loci detection workflow")
+        logger.info(
+            "Loci detection budget: Snakemake cores=%s, internal worker cores=%s",
+            args.snakemake_cores if args.snakemake_mode == "local" else "slurm",
+            worker_cores,
+        )
         subprocess.run(cmd, check=True, env=env)
         return
+
+    worker_cores = _normalize_worker_cores(loci_params.get("worker_cores", 1))
+    os.environ.update(_build_thread_limited_env(threads=1))
+    os.environ["SPICE_LOCI_WORKER_CORES"] = str(worker_cores)
 
     # Non-Snakemake mode: Use the loci detection pipeline
     from spice.main_loci_functions import (
@@ -834,8 +905,6 @@ def main_loci_detection(args):
     )
     from spice.data_loaders import load_final_events
 
-    # Get loci detection parameters from config
-    loci_params = config["loci_detection"]
     final_events_df = load_final_events()
 
     logger.info("Processing final events for loci detection")
@@ -914,6 +983,7 @@ def main_loci_detection(args):
             N_bootstrap_for_widths=loci_params["N_bootstrap_for_widths"],
             within_ci_N_iterations=loci_params["within_ci_N_iterations"],
             th_locus_prominence=loci_params["th_locus_prominence"],
+            worker_cores=worker_cores,
         )
 
     if not (
@@ -1313,6 +1383,11 @@ Examples:
         type=int,
         default=1,
         help="Number of cores for local Snakemake execution (-c, default: 1)",
+    )
+    parser_loci.add_argument(
+        "--unlock",
+        action="store_true",
+        help="Unlock the Snakemake working directory and exit",
     )
     parser_loci.set_defaults(func=main_loci_detection)
 
