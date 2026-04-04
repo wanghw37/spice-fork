@@ -25,13 +25,13 @@ def main():
     dfs = []
     for i, path in enumerate(input_paths):
         df = pd.read_csv(path, sep="\t")
-        df = df[["chrom", "pos", "type", "added_events"]].copy()
+        df = df[["chrom", "start", "end", "type", "added_events"]].copy()
         df = df.rename(columns={"added_events": f"run_{i}"})
         dfs.append(df)
 
     merged = dfs[0]
     for i in range(1, len(dfs)):
-        merged = merged.merge(dfs[i], on=["chrom", "pos", "type"], how="inner")
+        merged = merged.merge(dfs[i], on=["chrom", "start", "end", "type"], how="inner")
 
     run_cols = [f"run_{i}" for i in range(n_runs)]
     consensus_mask = (merged[run_cols] > 1).all(axis=1)
@@ -39,8 +39,10 @@ def main():
 
     consensus["avg_added_events"] = consensus[run_cols].mean(axis=1)
 
-    out_cols = ["chrom", "pos", "type", "avg_added_events"] + run_cols
-    consensus = consensus[out_cols].sort_values(["chrom", "pos"]).reset_index(drop=True)
+    out_cols = ["chrom", "start", "end", "type", "avg_added_events"] + run_cols
+    consensus = (
+        consensus[out_cols].sort_values(["chrom", "start"]).reset_index(drop=True)
+    )
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     consensus.to_csv(output_path, sep="\t", index=False)
