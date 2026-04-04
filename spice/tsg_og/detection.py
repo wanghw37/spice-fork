@@ -30,6 +30,63 @@ from spice.tsg_og.event_rate_per_loci import calc_total_events_per_loci
 
 
 logger = get_logger("tsg_og_detection")
+
+
+def _make_empty_track(
+    cur_chrom,
+    cur_length_scale,
+    cur_type,
+    ls_i,
+    segment_size,
+    signal_bootstrap_bounds,
+):
+    """Build a zero-signal track dict for chromosomes with no events in a bucket.
+
+    The returned dict has the same keys as a normal track so that downstream
+    code (simulation, optimization) can iterate over all 8 layers without
+    special-casing None placeholders.
+    """
+    chrom_len = CHROM_LENS.loc[cur_chrom]
+    n_bins = int(chrom_len // segment_size)
+    signals = np.zeros(n_bins, dtype=float)
+
+    centro_start, centro_end = CENTROMERES_OBSERVED.loc[
+        cur_chrom, cur_length_scale
+    ].values
+    centro_start_i = int(centro_start // segment_size)
+    centro_end_i = int(centro_end // segment_size)
+    non_centromere_index = np.setdiff1d(
+        np.arange(n_bins), np.arange(centro_start_i, centro_end_i)
+    )
+
+    # Build centromere_values manually for empty track
+    centro_start_obs = CENTROMERES_OBSERVED[cur_length_scale].loc[cur_chrom, 'centro_start']
+    centro_end_obs = CENTROMERES_OBSERVED[cur_length_scale].loc[cur_chrom, 'centro_end']
+    centromere_values = {
+        'left_centromere_outer_bound': max(0, int(centro_start_obs / segment_size) - 1),
+        'right_centromere_outer_bound': min(n_bins, int(centro_end_obs / segment_size) + 1),
+        'left_centromere_bound': max(0, int(centro_start_obs / segment_size)),
+        'right_centromere_bound': min(n_bins, int(centro_end_obs / segment_size)),
+        'centro_width': centro_end_obs - centro_start_obs,
+    }
+
+    return {
+        "chrom": cur_chrom,
+        "signals": signals,
+        "cur_widths": np.array([], dtype=float),
+        "loci_width": 1,
+        "length_scale": cur_length_scale,
+        "type": cur_type,
+        "length_scale_i": ls_i,
+        "non_centromere_index": non_centromere_index,
+        "cur_loss_norm": 1.0,
+        "kernel": np.array([], dtype=float),
+        "height_multiplier": np.ones(n_bins, dtype=float),
+        "centromere_values": centromere_values,
+        "signal_bounds": signal_bootstrap_bounds[ls_i],
+        "signal_upsampling": 1.0,
+        "is_empty_track": True,
+    }
 DATA_LOADERS_DIR = os.path.join(directories["results_dir"], "data_loaders")
 CHROMS = ["chr" + str(x) for x in range(1, 23)] + ["chrX", "chrY"]
 CENTROMERES = data_loaders.load_centromeres()
@@ -174,9 +231,16 @@ def collect_data_per_length_scale(
                 )
             else:
                 logger.warning(
-                    f"No events found for {cur_chrom}, {cur_length_scale}, {cur_type}, skipping"
+                    f"No events found for {cur_chrom}, {cur_length_scale}, {cur_type}, creating empty track"
                 )
-                data_per_length_scale[(cur_length_scale, cur_type)] = None
+                data_per_length_scale[(cur_length_scale, cur_type)] = _make_empty_track(
+                    cur_chrom,
+                    cur_length_scale,
+                    cur_type,
+                    ls_i,
+                    segment_size_dict[cur_length_scale],
+                    signal_bootstrap_bounds,
+                )
                 continue
 
         cur_length_scale_border = length_scale_boundaries[cur_length_scale]
@@ -239,6 +303,7 @@ def collect_data_per_length_scale(
             "type": cur_type,
             "length_scale_i": ls_i,
             "non_centromere_index": non_centromere_index,
+            "is_empty_track": False,
             "cur_loss_norm": cur_loss_norm,
             "kernel": kernel,
             "height_multiplier": height_multiplier,
@@ -247,10 +312,11 @@ def collect_data_per_length_scale(
         }
 
     for key in data_per_length_scale.keys():
-        if (
-            data_per_length_scale[key] is None
-            or data_per_length_scale[("small", "gain")] is None
-        ):
+        # Skip empty tracks (they already have signal_upsampling set in _make_empty_track)
+        if data_per_length_scale[key].get("is_empty_track", False):
+            continue
+        # If small_gain is empty, all tracks are empty, so skip
+        if data_per_length_scale[("small", "gain")].get("is_empty_track", False):
             continue
         data_per_length_scale[key]["signal_upsampling"] = len(
             data_per_length_scale[("small", "gain")]["signals"]

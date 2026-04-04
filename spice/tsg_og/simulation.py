@@ -498,11 +498,16 @@ def convolution_simulation_per_ls(cur_chrom, data_per_length_scale, cur_selectio
         cur_selection_points = 8 * [[SelectionPoints()]]
     assert len(cur_selection_points) == 8, len(cur_selection_points)
 
-    return [convolution_simulation(
-                cur_chrom=cur_chrom, selection_points=combine_selection_points(cur_sp), cur_widths=data['cur_widths'],
-                kernel=data['kernel'], chrom_size=None, kernel_edge=data.get('kernel_edge', None), cur_length_scale=data['length_scale'],
-                segment_size=segment_size_dict[data['length_scale']], centromere_values=data['centromere_values'],
-                normalize_from_signal=normalize_from_signal, cur_signal=data['signals'],
-                legacy_height_multiplier=legacy_height_multiplier,
-                height_multiplier=None if legacy_height_multiplier else data['height_multiplier'])
+    def _simulate_or_empty(data, cur_sp):
+        if data.get("is_empty_track", False):
+            return np.zeros_like(data["signals"], dtype=float)
+        return convolution_simulation(
+            cur_chrom=cur_chrom, selection_points=combine_selection_points(cur_sp), cur_widths=data['cur_widths'],
+            kernel=data['kernel'], chrom_size=None, kernel_edge=data.get('kernel_edge', None), cur_length_scale=data['length_scale'],
+            segment_size=segment_size_dict[data['length_scale']], centromere_values=data['centromere_values'],
+            normalize_from_signal=normalize_from_signal, cur_signal=data['signals'],
+            legacy_height_multiplier=legacy_height_multiplier,
+            height_multiplier=None if legacy_height_multiplier else data['height_multiplier'])
+
+    return [_simulate_or_empty(data, cur_sp)
             for data, cur_sp in zip(data_per_length_scale.values(), cur_selection_points)]
